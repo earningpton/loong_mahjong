@@ -30,27 +30,24 @@ jobs:
       run: |
         echo "🐉 Building Mahjong Loong for web..."
 
-        # Use the fallback approach directly since it's more reliable
-        echo "🔄 Using direct compilation with Raylib source..."
-
         # Clone Raylib
         git clone --depth 1 https://github.com/raysan5/raylib.git
 
-        # Compile directly with all Raylib source files
+        # Build Raylib library first (C files)
+        echo "📦 Building Raylib for web..."
+        cd raylib/src
+        make PLATFORM=PLATFORM_WEB -B
+        cd ../../
+
+        # Now compile our C++ game with the Raylib library
+        echo "🔨 Compiling game..."
         emcc main.cpp \
-          raylib/src/rcore.c \
-          raylib/src/rshapes.c \
-          raylib/src/rtextures.c \
-          raylib/src/rtext.c \
-          raylib/src/rmodels.c \
-          raylib/src/raudio.c \
-          raylib/src/utils.c \
           -std=c++17 \
           -O2 \
           -I./raylib/src \
-          -I./raylib/src/external \
+          -L./raylib/src \
+          -lraylib.web \
           -DPLATFORM_WEB \
-          -DGRAPHICS_API_OPENGL_ES2 \
           -s USE_GLFW=3 \
           -s ASYNCIFY \
           -s TOTAL_MEMORY=134217728 \
