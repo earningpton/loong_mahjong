@@ -16,6 +16,9 @@ permissions:
 jobs:
   build-web:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
     - name: 📥 Checkout repository
@@ -183,7 +186,7 @@ jobs:
         echo "📊 File sizes:"
         du -h deploy/* || echo "No files in deploy directory"
 
-    - name: � Setup GitHub Pages
+    - name: 🔧 Setup GitHub Pages
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: actions/configure-pages@v4
 
