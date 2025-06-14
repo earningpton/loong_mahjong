@@ -59,7 +59,7 @@ jobs:
         ls -la raylib/src/libraylib.web.a || echo "❌ Raylib web library not found"
         echo ""
 
-        # Attempt compilation
+        # Attempt compilation with improved flags for web stability
         if emcc main.cpp \
           -std=c++17 \
           -O2 \
@@ -69,11 +69,15 @@ jobs:
           -DPLATFORM_WEB \
           -s USE_GLFW=3 \
           -s ASYNCIFY \
-          -s TOTAL_MEMORY=134217728 \
+          -s INITIAL_MEMORY=268435456 \
           -s ALLOW_MEMORY_GROWTH=1 \
+          -s MAXIMUM_MEMORY=536870912 \
           -s FORCE_FILESYSTEM=1 \
-          -s ASSERTIONS=1 \
+          -s ASSERTIONS=0 \
           -s LEGACY_GL_EMULATION=1 \
+          -s DISABLE_EXCEPTION_CATCHING=0 \
+          -s SAFE_HEAP=0 \
+          -s STACK_SIZE=5242880 \
           --preload-file Graphics \
           --preload-file Sounds \
           -o mahjong_loong.html; then
@@ -98,11 +102,15 @@ jobs:
             -DGRAPHICS_API_OPENGL_ES2 \
             -s USE_GLFW=3 \
             -s ASYNCIFY \
-            -s TOTAL_MEMORY=134217728 \
+            -s INITIAL_MEMORY=268435456 \
             -s ALLOW_MEMORY_GROWTH=1 \
+            -s MAXIMUM_MEMORY=536870912 \
             -s FORCE_FILESYSTEM=1 \
-            -s ASSERTIONS=1 \
+            -s ASSERTIONS=0 \
             -s LEGACY_GL_EMULATION=1 \
+            -s DISABLE_EXCEPTION_CATCHING=0 \
+            -s SAFE_HEAP=0 \
+            -s STACK_SIZE=5242880 \
             --preload-file Graphics \
             --preload-file Sounds \
             -o mahjong_loong.html
