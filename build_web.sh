@@ -75,6 +75,7 @@ emcc main.cpp \
     -I./raylib/src \
     -L. \
     -lraylib \
+    -DPLATFORM_WEB \
     -s USE_GLFW=3 \
     -s ASYNCIFY \
     -s TOTAL_MEMORY=134217728 \
@@ -82,10 +83,9 @@ emcc main.cpp \
     -s FORCE_FILESYSTEM=1 \
     -s ASSERTIONS=1 \
     -s LEGACY_GL_EMULATION=1 \
-    --shell-file web_shell.html \
     --preload-file Graphics \
     --preload-file Sounds \
-    -o mahjong_loong.js
+    -o mahjong_loong.html
 
 # Check if compilation was successful
 if [ $? -eq 0 ]; then

@@ -67,19 +67,37 @@ python -m http.server 8000
 # Open: http://localhost:8000/mahjong_loong.html
 ```
 
-#### Alternative Build Methods
-```bash
-# Using Makefile
-make -f Makefile.web
+## 💾 Save System
 
-# Manual compilation
-emcc main.cpp -std=c++17 -O2 -s USE_GLFW=3 -s ASYNCIFY \
-  --preload-file Graphics --preload-file Sounds \
-  -o mahjong_loong.js
-```
+### Desktop Versions
+- **Windows/Mac**: Saves to local files (`highscore.txt`, `progress.txt`)
+- **Persistent**: Saves remain between game sessions
+- **Fresh Start**: Each distribution starts clean for new players
+
+### Web Version
+- **Browser Storage**: Uses localStorage for persistent saves
+- **Cross-Session**: Progress saved between browser sessions
+- **Per-Browser**: Each browser maintains separate progress
+- **Privacy-Friendly**: All data stays on user's device
+
+**What Gets Saved:**
+- 🏆 High scores for each dragon + difficulty combination
+- 🔓 Unlocked dragons and difficulty levels
+- 🎯 Overall best score
+
+**Note**: Web saves persist until the user clears browser data or uses incognito mode.
+
+## 📦 Distribution
+
+**For Windows:**
+1. Zip the `MahjongLoong_Windows` folder
+2. Users double-click `DOUBLE_CLICK_TO_INSTALL.bat`
 
 **For Mac:**
-1. Zip the `MahjongLoong_Mac` folder  
-2. Send to Mac users
-3. They follow instructions in `INSTALL_ME.txt`
-4. If issues, they use `FIX_PERMISSIONS.command`
+1. Zip the `MahjongLoong_Mac` folder
+2. Users follow instructions in `INSTALL_ME.txt`
+3. If issues, they use `FIX_PERMISSIONS.command`
+
+**For Web:**
+- Automatically deployed via GitHub Actions
+- No installation required - just visit the URL!

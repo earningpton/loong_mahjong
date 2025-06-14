@@ -11,6 +11,11 @@
 #include <string>
 #include <utility>
 
+#ifdef PLATFORM_WEB
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#endif
+
 using namespace std;
 
 static bool allowMove = false;
@@ -5688,6 +5693,18 @@ public:
 
     void LoadHighScore()
     {
+#ifdef PLATFORM_WEB
+        // For web version, use localStorage via Emscripten
+        EM_ASM({
+            var highScore = localStorage.getItem('mahjong_loong_highscore');
+            if (highScore) {
+                setValue($0, parseInt(highScore), 'i32');
+            } else {
+                setValue($0, 0, 'i32');
+            }
+        }, &highScore);
+#else
+        // Desktop version uses file I/O
         ifstream file("highscore.txt");
         if (file.is_open())
         {
@@ -5698,19 +5715,54 @@ public:
         {
             highScore = 0;
         }
+#endif
     }
 
     void SaveHighScore()
     {
+#ifdef PLATFORM_WEB
+        // For web version, save to localStorage
+        EM_ASM({
+            localStorage.setItem('mahjong_loong_highscore', $0);
+        }, highScore);
+#else
+        // Desktop version uses file I/O
         ofstream file("highscore.txt");
         if (file.is_open())
         {
             file << highScore;
             file.close();
         }
+#endif
     }
 
     void SaveProgressData() {
+#ifdef PLATFORM_WEB
+        // For web version, save to localStorage as JSON-like string
+        string progressData = "";
+
+        // Save LOONG-specific high scores
+        for (auto& entry : loongHighScores) {
+            progressData += "HIGH " + to_string(entry.first.first) + " " +
+                           to_string(entry.first.second) + " " + to_string(entry.second) + "\n";
+        }
+
+        // Save unlocked difficulties
+        for (auto& entry : difficultyUnlocked) {
+            if (entry.second) { // Only save unlocked ones
+                progressData += "UNLOCK " + to_string(entry.first.first) + " " +
+                               to_string(entry.first.second) + "\n";
+            }
+        }
+
+        // Save to localStorage
+        EM_ASM({
+            localStorage.setItem('mahjong_loong_progress', UTF8ToString($0));
+        }, progressData.c_str());
+
+        cout << "Progress data saved to browser storage!" << endl;
+#else
+        // Desktop version uses file I/O
         ofstream file("progress.txt");
         if (file.is_open()) {
             // Save LOONG-specific high scores
@@ -5728,10 +5780,70 @@ public:
             file.close();
             cout << "Progress data saved successfully!" << endl;
         }
+#endif
     }
 
     void LoadProgressData() {
-        // FOR DISTRIBUTION: Always start fresh - don't load existing progress
+#ifdef PLATFORM_WEB
+        // For web version, try to load from localStorage
+        char* progressData = (char*)EM_ASM_PTR({
+            var data = localStorage.getItem('mahjong_loong_progress');
+            if (data) {
+                var lengthBytes = lengthBytesUTF8(data) + 1;
+                var stringOnWasmHeap = _malloc(lengthBytes);
+                stringToUTF8(data, stringOnWasmHeap, lengthBytes);
+                return stringOnWasmHeap;
+            }
+            return 0;
+        });
+
+        if (progressData) {
+            // Parse the progress data
+            string data(progressData);
+            free(progressData);
+
+            istringstream iss(data);
+            string line;
+
+            while (getline(iss, line)) {
+                istringstream lineStream(line);
+                string type;
+                lineStream >> type;
+
+                if (type == "HIGH") {
+                    int loongType, difficulty, score;
+                    lineStream >> loongType >> difficulty >> score;
+                    pair<LoongType, DifficultyLevel> key = {(LoongType)loongType, (DifficultyLevel)difficulty};
+                    loongHighScores[key] = score;
+                } else if (type == "UNLOCK") {
+                    int loongType, difficulty;
+                    lineStream >> loongType >> difficulty;
+                    pair<LoongType, DifficultyLevel> key = {(LoongType)loongType, (DifficultyLevel)difficulty};
+                    difficultyUnlocked[key] = true;
+                }
+            }
+
+            cout << "Progress loaded from browser storage!" << endl;
+        } else {
+            // First time playing - start fresh
+            cout << "First time playing - starting fresh!" << endl;
+
+            // Reset all high scores to 0
+            for (auto& entry : loongHighScores) {
+                entry.second = 0;
+            }
+
+            // Reset all difficulty unlocks except first dragon's first difficulty
+            for (auto& entry : difficultyUnlocked) {
+                if (entry.first.first == BASIC_LOONG && entry.first.second == FOUNDATION_BUILDING) {
+                    entry.second = true; // Keep first dragon's first difficulty unlocked
+                } else {
+                    entry.second = false; // Lock everything else
+                }
+            }
+        }
+#else
+        // FOR DESKTOP DISTRIBUTION: Always start fresh - don't load existing progress
         cout << "Starting with fresh progress for new player!" << endl;
 
         // Reset all high scores to 0
@@ -5749,6 +5861,7 @@ public:
         }
 
         cout << "Fresh game state initialized - only Fa Cai Foundation Building unlocked!" << endl;
+#endif
     }
 
     void CheckCollisionWithTail()

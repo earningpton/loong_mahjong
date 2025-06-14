@@ -26,66 +26,13 @@ jobs:
         emcc --version
         echo "Emscripten installed successfully!"
         
-    - name: 📦 Setup Raylib for Web
-      run: |
-        echo "📦 Setting up Raylib for Emscripten..."
-
-        # Clone Raylib
-        git clone --depth 1 https://github.com/raysan5/raylib.git
-
-        echo "✅ Raylib source ready!"
-
     - name: 🔨 Build web version
       run: |
         echo "🐉 Building Mahjong Loong for web..."
 
-        # Try multiple build approaches for maximum compatibility
-
-        # Approach 1: Use Raylib's web template
-        echo "🔄 Trying Raylib web template approach..."
-        cd raylib/projects/template_web
-        cp ../../../main.cpp src/
-        cp -r ../../../Graphics ./ || echo "Graphics folder not found"
-        cp -r ../../../Sounds ./ || echo "Sounds folder not found"
-
-        # Modify the Makefile to use our main.cpp
-        sed -i 's/main.c/main.cpp/g' Makefile
-
-        # Build using Raylib's web template
-        make
-
-        # Copy results back
-        cp game.html ../../../mahjong_loong.html
-        cp game.js ../../../mahjong_loong.js
-        cp game.wasm ../../../mahjong_loong.wasm
-        cp game.data ../../../mahjong_loong.data || echo "No data file generated"
-
-        cd ../../..
-
-        echo "✅ Build completed using Raylib template!"
-
-    - name: 🔄 Fallback build (if needed)
-      if: failure()
-      run: |
-        echo "🔄 Primary build failed, trying fallback approach..."
-
-        # Simple direct compilation
-        emcc main.cpp \
-          -o mahjong_loong.html \
-          -std=c++17 \
-          -Os \
-          -I./raylib/src \
-          -I./raylib/src/external \
-          -s USE_GLFW=3 \
-          -s ASYNCIFY \
-          -s TOTAL_MEMORY=67108864 \
-          -s FORCE_FILESYSTEM=1 \
-          -DPLATFORM_WEB \
-          --preload-file Graphics \
-          --preload-file Sounds \
-          --shell-file minshell.html || echo "Fallback build also failed"
-
-        echo "✅ Fallback build attempt completed!"
+        # Make build script executable and run it
+        chmod +x build_web.sh
+        ./build_web.sh
         
     - name: 📋 List generated files
       run: |
@@ -108,8 +55,6 @@ jobs:
           mahjong_loong.js
           mahjong_loong.wasm
           mahjong_loong.data
-          Graphics/**
-          Sounds/**
           README.md
           
     - name: 📤 Upload build artifacts
