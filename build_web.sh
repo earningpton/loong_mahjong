@@ -58,8 +58,8 @@ if [ ! -f "libraylib.a" ] || [ ! -d "raylib" ]; then
     cd raylib/src
     make PLATFORM=PLATFORM_WEB -B
 
-    # Copy the library
-    cp libraylib.a ../../
+    # Copy the web library (it's named libraylib.web.a)
+    cp libraylib.web.a ../../libraylib.a
     cd ../../
 
     echo "✅ Raylib for web ready!"
@@ -118,16 +118,63 @@ if [ $? -eq 0 ]; then
     echo "   - Sounds/ (folder)"
 else
     echo ""
-    echo "❌ Compilation failed!"
+    echo "❌ Primary compilation failed! Trying fallback approach..."
     echo ""
-    echo "💡 Common solutions:"
-    echo "   - Make sure Emscripten is properly installed and activated"
-    echo "   - Check that main.cpp compiles on desktop first"
-    echo "   - Ensure Graphics and Sounds folders exist"
-    echo ""
-    echo "🔧 Debug info:"
-    echo "   - Emscripten version: $(emcc --version | head -n1)"
-    echo "   - Current directory: $(pwd)"
-    echo "   - Files present: $(ls -la main.cpp Graphics Sounds 2>/dev/null || echo 'Some files missing')"
-    exit 1
+
+    # Fallback: Try compiling with Raylib source files directly
+    echo "🔄 Attempting fallback compilation with Raylib source..."
+
+    emcc main.cpp \
+        raylib/src/rcore.c \
+        raylib/src/rshapes.c \
+        raylib/src/rtextures.c \
+        raylib/src/rtext.c \
+        raylib/src/rmodels.c \
+        raylib/src/raudio.c \
+        raylib/src/utils.c \
+        -std=c++17 \
+        -O2 \
+        -I./raylib/src \
+        -I./raylib/src/external \
+        -DPLATFORM_WEB \
+        -DGRAPHICS_API_OPENGL_ES2 \
+        -s USE_GLFW=3 \
+        -s ASYNCIFY \
+        -s TOTAL_MEMORY=134217728 \
+        -s ALLOW_MEMORY_GROWTH=1 \
+        -s FORCE_FILESYSTEM=1 \
+        -s ASSERTIONS=1 \
+        -s LEGACY_GL_EMULATION=1 \
+        --preload-file Graphics \
+        --preload-file Sounds \
+        -o mahjong_loong.html
+
+    if [ $? -eq 0 ]; then
+        echo ""
+        echo "✅ Fallback compilation successful!"
+        echo ""
+        echo "📁 Generated files:"
+        echo "   - mahjong_loong.html (Game page)"
+        echo "   - mahjong_loong.js (JavaScript loader)"
+        echo "   - mahjong_loong.wasm (WebAssembly binary)"
+        echo "   - mahjong_loong.data (Game assets)"
+        echo ""
+        echo "🌐 To test locally:"
+        echo "   python -m http.server 8000"
+        echo "   Then open: http://localhost:8000/mahjong_loong.html"
+    else
+        echo ""
+        echo "❌ Both compilation attempts failed!"
+        echo ""
+        echo "💡 Common solutions:"
+        echo "   - Make sure Emscripten is properly installed and activated"
+        echo "   - Check that main.cpp compiles on desktop first"
+        echo "   - Ensure Graphics and Sounds folders exist"
+        echo ""
+        echo "🔧 Debug info:"
+        echo "   - Emscripten version: $(emcc --version | head -n1)"
+        echo "   - Current directory: $(pwd)"
+        echo "   - Files present: $(ls -la main.cpp Graphics Sounds 2>/dev/null || echo 'Some files missing')"
+        exit 1
+    fi
 fi
