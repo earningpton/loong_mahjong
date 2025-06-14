@@ -67,20 +67,27 @@ jobs:
         echo "File sizes:"
         du -h mahjong_loong.*
         
-    - name: 🚀 Deploy to GitHub Pages
+    - name: � Prepare deployment files
+      run: |
+        # Create a clean deployment directory
+        mkdir -p deploy
+        cp index.html deploy/ || echo "index.html not found"
+        cp mahjong_loong.html deploy/ || echo "mahjong_loong.html not found"
+        cp mahjong_loong.js deploy/ || echo "mahjong_loong.js not found"
+        cp mahjong_loong.wasm deploy/ || echo "mahjong_loong.wasm not found"
+        cp mahjong_loong.data deploy/ || echo "mahjong_loong.data not found"
+        cp README.md deploy/ || echo "README.md not found"
+
+        echo "Files prepared for deployment:"
+        ls -la deploy/
+
+    - name: �🚀 Deploy to GitHub Pages
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: .
-        keep_files: true
-        include_files: |
-          index.html
-          mahjong_loong.html
-          mahjong_loong.js
-          mahjong_loong.wasm
-          mahjong_loong.data
-          README.md
+        publish_dir: deploy
+        keep_files: false
           
     - name: 📤 Upload build artifacts
       uses: actions/upload-artifact@v4
