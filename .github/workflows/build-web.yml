@@ -7,25 +7,31 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+# Add permissions for GitHub Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   build-web:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: 📥 Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: 📦 Setup Emscripten
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: latest
         actions-cache-folder: 'emsdk-cache'
-        
+
     - name: 🔍 Verify Emscripten installation
       run: |
         emcc --version
         echo "Emscripten installed successfully!"
-        
+
     - name: 🔨 Build web version
       run: |
         echo "🐉 Building Mahjong Loong for web..."
@@ -58,7 +64,7 @@ jobs:
           --preload-file Graphics \
           --preload-file Sounds \
           -o mahjong_loong.html
-        
+
     - name: 📋 List generated files
       run: |
         echo "Generated files:"
@@ -66,8 +72,8 @@ jobs:
         echo ""
         echo "File sizes:"
         du -h mahjong_loong.*
-        
-    - name: � Prepare deployment files
+
+    - name: 📁 Prepare deployment files
       run: |
         # Create a clean deployment directory
         mkdir -p deploy
@@ -81,14 +87,14 @@ jobs:
         echo "Files prepared for deployment:"
         ls -la deploy/
 
-    - name: �🚀 Deploy to GitHub Pages
+    - name: 🚀 Deploy to GitHub Pages
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: deploy
         keep_files: false
-          
+
     - name: 📤 Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -100,7 +106,7 @@ jobs:
           mahjong_loong.wasm
           mahjong_loong.data
         retention-days: 30
-        
+
     - name: 🎉 Build summary
       run: |
         echo "🐉 Mahjong Loong web build completed!"
