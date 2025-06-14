@@ -332,14 +332,14 @@ public:
             totalDiscardCounts[make_pair(i, HAT_TILES)] = 0;
             totalDiscardCounts[make_pair(i, DOT_TILES)] = 0;
         }
-        GenerateRandomTiles();
+        GenerateRandomTiles(0); // Start with no latent level selected
         GenerateNextTile(); // Generate first preview tile
 
         // Test the advanced Mahjong algorithm on startup
         // TestMahjongLogic(); // Disabled for release
     }
 
-    void GenerateRandomTiles() {
+    void GenerateRandomTiles(int selectedLatentLevel = 0) {
         // Reset tile counts and gold tiles when drawing new hand (but keep used tiles tracker)
         cout << "Resetting tile pool for new hand..." << endl;
         tileCounts.clear();
@@ -353,7 +353,17 @@ public:
         }
 
         tiles.clear();
-        for (int i = 0; i < maxTiles; i++) {
+
+        // Add latent cultivation LOONG evolution tiles if a level is selected
+        cout << "GenerateRandomTiles called with selectedLatentLevel: " << selectedLatentLevel << endl;
+        if (selectedLatentLevel > 0) {
+            // This will be implemented by calling a function from the Game class
+            // since we need access to the current LOONG type and upgrade tile generation
+            cout << "Latent Cultivation Level " << selectedLatentLevel << " selected - evolution tiles will be added by Game class" << endl;
+        }
+
+        // Fill remaining slots with normal tiles
+        for (int i = tiles.size(); i < maxTiles; i++) {
             Tile newTile = GenerateValidTile();
             tiles.push_back(newTile);
 
@@ -449,8 +459,30 @@ public:
         }
 
         if (weightedOptions.empty()) {
-            cout << "Warning: No valid tiles available! Using fallback." << endl;
-            return Tile(1, PLAIN_TILES, false);
+            cout << "Warning: No valid tiles available! Auto-reshuffling tile pool..." << endl;
+
+            // Reset tile counts to allow all tiles again
+            tileCounts.clear();
+            for (TileType type : availableTypes) {
+                for (int i = 1; i <= 9; i++) {
+                    tileCounts[make_pair(i, type)] = 0;
+                }
+            }
+
+            // Clear gold tiles (except zeros which can KONG multiple times)
+            auto it = goldTiles.begin();
+            while (it != goldTiles.end()) {
+                if (it->first != 0) { // Keep zero tiles as gold if they were gold
+                    it = goldTiles.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            cout << "Tile pool reshuffled! Generating new tile..." << endl;
+
+            // Try again with fresh pool
+            return GenerateValidTile(probabilityBonus);
         }
 
         // Weighted random selection
@@ -1448,6 +1480,30 @@ public:
     int phoenixRebirthCharges = 0; // Phoenix Rebirth charges with bonus scoring
     string lastExtraLifeType = ""; // Track what type of extra life was used
 
+    // Audio controls
+    bool isMuted = false;
+    float masterVolume = 0.5f;
+
+    // UI improvements
+    bool showBackButton = false; // Show back button in appropriate screens
+
+    // Latent upgrade system
+    map<LoongType, int> loongTotalScores; // Total scores across all runs for each loong
+    map<LoongType, int> loongUpgradeLevel; // Upgrade level (0-5) for each loong
+    vector<int> latentUpgradeThresholds = {250, 500, 1000, 2000, 4000}; // Score thresholds for latent upgrades
+    int selectedLatentLevel = 0; // Currently selected latent cultivation level (0 = none, 1-5 = levels)
+
+    // Latent cultivation upgrade spawning queue - SEPARATE from normal upgrade system
+    vector<LoongType> pendingLatentUpgrades;
+    float latentUpgradeSpawnTimer = 0.0f;
+    float latentUpgradeSpawnDelay = 1.0f; // 1 second between spawns
+    bool latentCultivationSpawned = false; // Track if we've spawned latent cultivation tiles yet
+
+    // Separate latent cultivation tile system
+    Vector2 latentUpgradeTilePosition;
+    bool latentUpgradeSpawned = false;
+    LoongType latentUpgradeTileType;
+
     // Music dictionary system
     Music alternateMusic;
     int lastOrnateLevel = -1; // Track ornate level changes
@@ -1523,11 +1579,14 @@ public:
         // Load LOONG selection music
         loongSelectMusic = LoadMusicStream("Sounds/select_loong.mp3");
         if (loongSelectMusic.stream.buffer != NULL) {
-            SetMusicVolume(loongSelectMusic, 0.5f);
+            SetMusicVolume(loongSelectMusic, masterVolume);
             cout << "Successfully loaded select_loong.mp3" << endl;
         } else {
             cout << "Failed to load select_loong.mp3" << endl;
         }
+
+        // Initialize latent upgrade system
+        InitializeLatentUpgrades();
 
         // Load final stretch music (random selection)
         finalStretchMusic1 = LoadMusicStream("Sounds/final_stretch/blades_and_beats.mp3");
@@ -3203,6 +3262,86 @@ public:
         cout << "*** COLLECTED " << GetLoongTypeName(upgradeTileType) << " UPGRADE TILE! Next threshold: " << nextUpgradeThreshold << " ***" << endl;
     }
 
+    void CollectLatentUpgradeTile() {
+        latentUpgradeSpawned = false;
+
+        // Generate upgrade choices for the collected latent LOONG type
+        GenerateUpgradeChoicesForLoong(latentUpgradeTileType);
+        cout << "*** COLLECTED LATENT CULTIVATION " << GetLoongTypeName(latentUpgradeTileType) << " UPGRADE TILE! ***" << endl;
+    }
+
+    void DrawLatentUpgradeTile() {
+        // Get the color for this LOONG type
+        Color upgradeColor = WHITE;
+        string upgradeSymbol = "?";
+
+        switch (latentUpgradeTileType) {
+            case BASIC_LOONG:
+                upgradeColor = {34, 139, 34, 255}; // Forest Green
+                upgradeSymbol = "B";
+                break;
+            case FIRE_LOONG:
+                upgradeColor = {255, 69, 0, 255}; // Red Orange
+                upgradeSymbol = "F";
+                break;
+            case WATER_LOONG:
+                upgradeColor = {30, 144, 255, 255}; // Dodger Blue
+                upgradeSymbol = "W";
+                break;
+            case WHITE_LOONG:
+                upgradeColor = {248, 248, 255, 255}; // Ghost White
+                upgradeSymbol = "P"; // P for Pure
+                break;
+            case EARTH_LOONG:
+                upgradeColor = {139, 69, 19, 255}; // Saddle Brown
+                upgradeSymbol = "E";
+                break;
+            case WIND_LOONG:
+                upgradeColor = {192, 192, 192, 255}; // Silver
+                upgradeSymbol = "A"; // A for Air
+                break;
+            case SHADOW_LOONG:
+                upgradeColor = {75, 0, 130, 255}; // Indigo
+                upgradeSymbol = "S";
+                break;
+            case CELESTIAL_LOONG:
+                upgradeColor = {255, 215, 0, 255}; // Gold
+                upgradeSymbol = "C";
+                break;
+        }
+
+        // Draw upgrade tile with diamond/dragon symbol
+        int tileX = gameAreaOffset + latentUpgradeTilePosition.x * cellSize;
+        int tileY = gameAreaOffset + latentUpgradeTilePosition.y * cellSize;
+
+        // Draw pulsing background with different timing to distinguish from normal upgrades
+        static float pulseTimer = 0.0f;
+        pulseTimer += GetFrameTime();
+        float pulse = (sin(pulseTimer * 12) + 1) * 0.5f; // Faster pulse for latent cultivation
+
+        // Outer glow effect - brighter for latent cultivation
+        Rectangle glowRect = {(float)(tileX - 8), (float)(tileY - 8), (float)(cellSize + 16), (float)(cellSize + 16)};
+        Color glowColor = upgradeColor;
+        glowColor.a = (unsigned char)(150 + pulse * 100);
+        DrawRectangleRec(glowRect, glowColor);
+
+        // Main tile with double border for latent cultivation
+        Rectangle tileRect = {(float)tileX, (float)tileY, (float)cellSize, (float)cellSize};
+        DrawRectangleRec(tileRect, upgradeColor);
+        DrawRectangleLinesEx(tileRect, 6, WHITE); // Thicker border
+
+        // Draw diamond/dragon symbol in center
+        int symbolSize = 32;
+        int symbolX = tileX + cellSize/2 - MeasureText(upgradeSymbol.c_str(), symbolSize)/2;
+        int symbolY = tileY + cellSize/2 - symbolSize/2;
+        DrawText(upgradeSymbol.c_str(), symbolX, symbolY, symbolSize, BLACK);
+
+        // Draw "LATENT" label above tile
+        string typeName = "LATENT " + GetLoongTypeName(latentUpgradeTileType);
+        int nameWidth = MeasureText(typeName.c_str(), 14);
+        DrawText(typeName.c_str(), tileX + cellSize/2 - nameWidth/2, tileY - 25, 14, upgradeColor);
+    }
+
     void GenerateUpgradeChoicesForLoong(LoongType loongType) {
         upgradeChoices.clear();
 
@@ -3444,6 +3583,12 @@ public:
                 // Reset sound pitch for normal gameplay
                 SetSoundPitch(eatSound, 1.0f);
                 gameState = PLAYING;
+
+                // Trigger latent cultivation spawning now that the game has started
+                if (!latentCultivationSpawned && selectedLatentLevel > 0) {
+                    SpawnLatentCultivationUpgrades();
+                    latentCultivationSpawned = true;
+                }
             }
         }
 
@@ -3492,6 +3637,39 @@ public:
 
     void UpdateGameplay()
     {
+        // Update latent cultivation upgrade spawning (SEPARATE from normal upgrades)
+        if (!pendingLatentUpgrades.empty() && !latentUpgradeSpawned) {
+            latentUpgradeSpawnTimer -= GetFrameTime();
+            if (latentUpgradeSpawnTimer <= 0.0f) {
+                // Spawn the next latent cultivation tile in queue
+                LoongType nextUpgrade = pendingLatentUpgrades[0];
+                pendingLatentUpgrades.erase(pendingLatentUpgrades.begin());
+
+                // Spawn latent cultivation tile separately from normal upgrades
+                latentUpgradeTileType = nextUpgrade;
+                latentUpgradeTilePosition = {
+                    (float)GetRandomValue(2, cellCount - 3),
+                    (float)GetRandomValue(2, cellCount - 3)
+                };
+
+                // Make sure it doesn't spawn on snake, food, or normal upgrade tile
+                while (ElementInDeque(latentUpgradeTilePosition, snake.body) ||
+                       (latentUpgradeTilePosition.x == food.position.x && latentUpgradeTilePosition.y == food.position.y) ||
+                       (upgradeSpawned && latentUpgradeTilePosition.x == upgradeTilePosition.x && latentUpgradeTilePosition.y == upgradeTilePosition.y)) {
+                    latentUpgradeTilePosition = {
+                        (float)GetRandomValue(2, cellCount - 3),
+                        (float)GetRandomValue(2, cellCount - 3)
+                    };
+                }
+
+                latentUpgradeSpawned = true;
+                cout << "Spawned latent cultivation tile: " << GetLoongTypeName(nextUpgrade) << " at (" << latentUpgradeTilePosition.x << ", " << latentUpgradeTilePosition.y << ")" << endl;
+
+                // Reset timer for next spawn
+                latentUpgradeSpawnTimer = latentUpgradeSpawnDelay;
+            }
+        }
+
         if (gameState == PLAYING && !showChoiceWindow && !showLoongUpgrade && !isInExtraLifeMode) // Pause game during choice window, LOONG upgrade, or extra life
         {
             // Update snake direction based on mouse position
@@ -3631,7 +3809,26 @@ public:
             }
         }
         else if (gameState == DIFFICULTY_SELECTION) {
-            // Handle difficulty selection
+            // Handle mouse hover for difficulty selection
+            Vector2 mousePos = GetMousePosition();
+            int startY = 220;
+            int spacing = 80;
+
+            for (int i = 0; i < 5; i++) {
+                pair<LoongType, DifficultyLevel> diffKey = {selectedLoongType, (DifficultyLevel)i};
+                bool isUnlocked = (i == 0) || difficultyUnlocked[diffKey];
+
+                if (isUnlocked) {
+                    int diffY = startY + i * spacing;
+                    Rectangle diffRect = {150.0f, (float)(diffY - 10), 700.0f, 70.0f};
+
+                    if (CheckCollisionPointRec(mousePos, diffRect)) {
+                        selectedDifficulty = (DifficultyLevel)i;
+                    }
+                }
+            }
+
+            // Handle keyboard navigation
             if (IsKeyPressed(KEY_UP)) {
                 // Find previous unlocked difficulty
                 for (int i = selectedDifficulty - 1; i >= 0; i--) {
@@ -3653,10 +3850,38 @@ public:
                 }
             }
 
+            // Back button functionality (use BACKSPACE instead of ESC)
+            if (IsKeyPressed(KEY_BACKSPACE)) {
+                gameState = LOONG_SELECTION;
+            }
+
             // Confirm difficulty selection
             if (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                ApplyDifficultySettings();
-                gameState = INSTRUCTION_SCREEN;
+                // Check if clicking on a valid difficulty option
+                bool validClick = false;
+                for (int i = 0; i < 5; i++) {
+                    pair<LoongType, DifficultyLevel> diffKey = {selectedLoongType, (DifficultyLevel)i};
+                    bool isUnlocked = (i == 0) || difficultyUnlocked[diffKey];
+
+                    if (isUnlocked && selectedDifficulty == i) {
+                        int diffY = startY + i * spacing;
+                        Rectangle diffRect = {150.0f, (float)(diffY - 10), 700.0f, 70.0f};
+
+                        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                            if (CheckCollisionPointRec(mousePos, diffRect)) {
+                                validClick = true;
+                            }
+                        } else if (IsKeyPressed(KEY_ENTER)) {
+                            validClick = true;
+                        }
+                        break;
+                    }
+                }
+
+                if (validClick || IsKeyPressed(KEY_ENTER)) {
+                    ApplyDifficultySettings();
+                    gameState = INSTRUCTION_SCREEN;
+                }
             }
         }
         else if (gameState == INSTRUCTION_SCREEN) {
@@ -3855,6 +4080,17 @@ public:
                 cout << "🐉 Returning to LOONG Selection after Cultivation Success! 🐉" << endl;
             }
         }
+
+        // Global audio controls (work in any state)
+        if (IsKeyPressed(KEY_M)) {
+            ToggleMute();
+        }
+        if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) { // + key
+            SetVolume(masterVolume + 0.1f);
+        }
+        if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) { // - key
+            SetVolume(masterVolume - 0.1f);
+        }
     }
 
     void StartCountdown() {
@@ -3998,7 +4234,50 @@ public:
         }
 
         // Instructions
-        DrawText("UP/DOWN: Navigate  ENTER: Select", canvasWidth/2 - 200, canvasHeight - 100, 24, WHITE);
+        DrawText("UP/DOWN: Navigate  ENTER: Select  BACKSPACE: Back", canvasWidth/2 - 280, canvasHeight - 100, 24, WHITE);
+
+        // Audio controls
+        int audioY = canvasHeight - 150;
+        DrawText("Audio Controls:", 50, audioY, 20, YELLOW);
+
+        // Mute button
+        Rectangle muteButton = {50, (float)(audioY + 30), 100, 30};
+        Color muteColor = isMuted ? RED : GREEN;
+        DrawRectangleRec(muteButton, muteColor);
+        DrawRectangleLinesEx(muteButton, 2, WHITE);
+        const char* muteText = isMuted ? "UNMUTE" : "MUTE";
+        int muteTextWidth = MeasureText(muteText, 16);
+        DrawText(muteText, 50 + (100 - muteTextWidth)/2, audioY + 38, 16, WHITE);
+
+        // Volume slider
+        DrawText("Volume:", 170, audioY + 35, 16, WHITE);
+        Rectangle volumeSlider = {240, (float)(audioY + 35), 200, 20};
+        DrawRectangleRec(volumeSlider, DARKGRAY);
+        DrawRectangleLinesEx(volumeSlider, 2, WHITE);
+
+        // Volume indicator
+        float volumeWidth = volumeSlider.width * masterVolume;
+        Rectangle volumeIndicator = {volumeSlider.x, volumeSlider.y, volumeWidth, volumeSlider.height};
+        DrawRectangleRec(volumeIndicator, BLUE);
+
+        // Volume handle
+        float handleX = volumeSlider.x + volumeWidth - 5;
+        Rectangle volumeHandle = {handleX, volumeSlider.y - 2, 10, 24};
+        DrawRectangleRec(volumeHandle, WHITE);
+
+        // Handle audio control interactions
+        Vector2 mousePos = GetMousePosition();
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (CheckCollisionPointRec(mousePos, muteButton)) {
+                ToggleMute();
+            } else if (CheckCollisionPointRec(mousePos, volumeSlider)) {
+                float newVolume = (mousePos.x - volumeSlider.x) / volumeSlider.width;
+                SetVolume(newVolume);
+            }
+        }
+
+        // Latent upgrade display
+        DrawLatentUpgradeInfo();
     }
 
     void ApplyDifficultySettings() {
@@ -4014,6 +4293,8 @@ public:
                 extraLives = 3;
                 phoenixRebirthCharges = 0;
                 mahjongTiles.SetTileCount(4); // Start with 4 tiles
+                // Generate normal tiles
+                mahjongTiles.GenerateRandomTiles(0);
                 break;
 
             case GOLDEN_CORE:
@@ -4021,6 +4302,8 @@ public:
                 extraLives = 0;
                 phoenixRebirthCharges = 0;
                 mahjongTiles.SetTileCount(4); // Start with 4 tiles
+                // Generate normal tiles
+                mahjongTiles.GenerateRandomTiles(0);
                 break;
 
             case NASCENT_SOUL:
@@ -4028,6 +4311,8 @@ public:
                 extraLives = 1;
                 phoenixRebirthCharges = 0;
                 mahjongTiles.SetTileCount(7); // Start with 7 tiles
+                // Generate normal tiles
+                mahjongTiles.GenerateRandomTiles(0);
                 mahjongWinsRequired = 2; // Need 2 Mahjongs before can win
                 break;
 
@@ -4036,6 +4321,8 @@ public:
                 extraLives = 1;
                 phoenixRebirthCharges = 0;
                 mahjongTiles.SetTileCount(10); // Start with 10 tiles
+                // Generate normal tiles
+                mahjongTiles.GenerateRandomTiles(0);
                 mahjongWinsRequired = 5; // Need 5 Mahjongs before can win
                 break;
 
@@ -4044,6 +4331,8 @@ public:
                 extraLives = 1;
                 phoenixRebirthCharges = 0;
                 mahjongTiles.SetTileCount(13); // Start with 13 tiles
+                // Generate normal tiles
+                mahjongTiles.GenerateRandomTiles(0);
                 mahjongWinsRequired = 5; // Need 5 Mahjongs before can win
                 ornateLevel = LEVEL_3_INTRICATE; // Start at ornate level 3.5 (need to reach 4 to win)
                 break;
@@ -4228,6 +4517,11 @@ public:
             // Draw upgrade tile if spawned
             if (upgradeSpawned) {
                 DrawUpgradeTile();
+            }
+
+            // Draw latent cultivation tile if spawned
+            if (latentUpgradeSpawned) {
+                DrawLatentUpgradeTile();
             }
 
             // Get dragon colors based on selected LOONG
@@ -4902,6 +5196,12 @@ public:
             return; // Don't process food collision this frame
         }
 
+        // Check collision with latent cultivation tile
+        if (latentUpgradeSpawned && Vector2Equals(snake.body[0], latentUpgradeTilePosition)) {
+            CollectLatentUpgradeTile();
+            return; // Don't process food collision this frame
+        }
+
         if (Vector2Equals(snake.body[0], food.position))
         {
             // Increase snake age and fruit counter
@@ -4940,6 +5240,8 @@ public:
                 if (speedsterActive) kongPoints *= 3;
                 if (survivorActive || monkActive) kongPoints = 0; // No bonuses
 
+                UpdateLoongTotalScore(kongPoints); // Update latent upgrade progress
+
                 // Apply LOONG upgrade multipliers! 🐉✨
                 if (kongPoints > 0) {
                     // WHITE LOONG Sacred KONG: Check for four 0 KONG (200% bonus)
@@ -4961,6 +5263,7 @@ public:
                 }
 
                 score += kongPoints;
+                UpdateLoongTotalScore(kongPoints); // Update latent upgrade progress
                 if (score > highScore)
                 {
                     highScore = score;
@@ -5039,6 +5342,8 @@ public:
                 if (speedsterActive) mahjongPoints *= 3;
                 if (survivorActive || monkActive) mahjongPoints = 0; // No bonuses
 
+                UpdateLoongTotalScore(mahjongPoints); // Update latent upgrade progress
+
                 // Apply LOONG upgrade multipliers! 🐉✨
                 if (mahjongPoints > 0) {
                     mahjongPoints = (int)(mahjongPoints * mahjongScoreMultiplier);
@@ -5054,6 +5359,7 @@ public:
                 }
 
                 score += mahjongPoints;
+                UpdateLoongTotalScore(mahjongPoints); // Update latent upgrade progress
                 if (score > highScore)
                 {
                     highScore = score;
@@ -5154,6 +5460,7 @@ public:
 
                 // Add fruit scoring - +1 point per fruit
                 score += 1;
+                UpdateLoongTotalScore(1); // Update latent upgrade progress
                 if (score > highScore)
                 {
                     highScore = score;
@@ -5449,7 +5756,8 @@ public:
 
         snake.Reset();
         food.position = food.GenerateRandomPos(snake.body);
-        mahjongTiles.GenerateRandomTiles();
+        cout << "🎮 STARTING NEW GAME with selectedLatentLevel: " << selectedLatentLevel << endl;
+        mahjongTiles.GenerateRandomTiles(selectedLatentLevel);
 
         // Reset ornate level and mahjong wins on death
         ornateLevel = LEVEL_1_NONE;
@@ -5580,7 +5888,8 @@ public:
         // Reset game state for new game (similar to HandleDeath but without GAME_OVER)
         snake.Reset();
         food.position = food.GenerateRandomPos(snake.body);
-        mahjongTiles.GenerateRandomTiles();
+        cout << "🔄 RESETTING GAME with selectedLatentLevel: " << selectedLatentLevel << endl;
+        mahjongTiles.GenerateRandomTiles(0);
 
         // Reset ornate level and mahjong wins
         ornateLevel = LEVEL_1_NONE;
@@ -5635,6 +5944,12 @@ public:
         tilesConsumedSinceUpgrade = 0;
         nextUpgradeThreshold = 10;
         isGraniteWillActive = false;
+
+        // Reset latent cultivation spawning
+        latentCultivationSpawned = false;
+        pendingLatentUpgrades.clear();
+        latentUpgradeSpawnTimer = 0.0f;
+        latentUpgradeSpawned = false;
 
         // Reset tile locking system
         mahjongTiles.futureTilesLocked = false;
@@ -5755,6 +6070,22 @@ public:
             }
         }
 
+        // Save latent upgrade total scores
+        for (auto& entry : loongTotalScores) {
+            if (entry.second > 0) { // Only save if there's progress
+                progressData += "TOTAL " + to_string(entry.first) + " " + to_string(entry.second) + "\n";
+                cout << "Saving total score: LOONG " << entry.first << " = " << entry.second << endl;
+            }
+        }
+
+        // Save latent upgrade levels
+        for (auto& entry : loongUpgradeLevel) {
+            if (entry.second > 0) { // Only save if there's progress
+                progressData += "LEVEL " + to_string(entry.first) + " " + to_string(entry.second) + "\n";
+                cout << "Saving upgrade level: LOONG " << entry.first << " = Level " << entry.second << endl;
+            }
+        }
+
         // Save to localStorage
         EM_ASM({
             localStorage.setItem('mahjong_loong_progress', UTF8ToString($0));
@@ -5774,6 +6105,20 @@ public:
             for (auto& entry : difficultyUnlocked) {
                 if (entry.second) { // Only save unlocked ones
                     file << "UNLOCK " << entry.first.first << " " << entry.first.second << endl;
+                }
+            }
+
+            // Save latent upgrade total scores
+            for (auto& entry : loongTotalScores) {
+                if (entry.second > 0) { // Only save if there's progress
+                    file << "TOTAL " << entry.first << " " << entry.second << endl;
+                }
+            }
+
+            // Save latent upgrade levels
+            for (auto& entry : loongUpgradeLevel) {
+                if (entry.second > 0) { // Only save if there's progress
+                    file << "LEVEL " << entry.first << " " << entry.second << endl;
                 }
             }
 
@@ -5820,6 +6165,16 @@ public:
                     lineStream >> loongType >> difficulty;
                     pair<LoongType, DifficultyLevel> key = {(LoongType)loongType, (DifficultyLevel)difficulty};
                     difficultyUnlocked[key] = true;
+                } else if (type == "TOTAL") {
+                    int loongType, totalScore;
+                    lineStream >> loongType >> totalScore;
+                    loongTotalScores[(LoongType)loongType] = totalScore;
+                    cout << "Loaded total score: LOONG " << loongType << " = " << totalScore << endl;
+                } else if (type == "LEVEL") {
+                    int loongType, level;
+                    lineStream >> loongType >> level;
+                    loongUpgradeLevel[(LoongType)loongType] = level;
+                    cout << "Loaded upgrade level: LOONG " << loongType << " = Level " << level << endl;
                 }
             }
 
@@ -5843,24 +6198,57 @@ public:
             }
         }
 #else
-        // FOR DESKTOP DISTRIBUTION: Always start fresh - don't load existing progress
-        cout << "Starting with fresh progress for new player!" << endl;
+        // Desktop version loads from progress.txt file
+        ifstream file("progress.txt");
+        if (file.is_open()) {
+            string line;
+            while (getline(file, line)) {
+                istringstream lineStream(line);
+                string type;
+                lineStream >> type;
 
-        // Reset all high scores to 0
-        for (auto& entry : loongHighScores) {
-            entry.second = 0;
-        }
-
-        // Reset all difficulty unlocks except first dragon's first difficulty
-        for (auto& entry : difficultyUnlocked) {
-            if (entry.first.first == BASIC_LOONG && entry.first.second == FOUNDATION_BUILDING) {
-                entry.second = true; // Keep first dragon's first difficulty unlocked
-            } else {
-                entry.second = false; // Lock everything else
+                if (type == "HIGH") {
+                    int loongType, difficulty, score;
+                    lineStream >> loongType >> difficulty >> score;
+                    pair<LoongType, DifficultyLevel> key = {(LoongType)loongType, (DifficultyLevel)difficulty};
+                    loongHighScores[key] = score;
+                } else if (type == "UNLOCK") {
+                    int loongType, difficulty;
+                    lineStream >> loongType >> difficulty;
+                    pair<LoongType, DifficultyLevel> key = {(LoongType)loongType, (DifficultyLevel)difficulty};
+                    difficultyUnlocked[key] = true;
+                } else if (type == "TOTAL") {
+                    int loongType, totalScore;
+                    lineStream >> loongType >> totalScore;
+                    loongTotalScores[(LoongType)loongType] = totalScore;
+                } else if (type == "LEVEL") {
+                    int loongType, level;
+                    lineStream >> loongType >> level;
+                    loongUpgradeLevel[(LoongType)loongType] = level;
+                }
             }
-        }
+            file.close();
+            cout << "Progress loaded from progress.txt!" << endl;
+        } else {
+            // First time playing - start fresh
+            cout << "First time playing - starting fresh!" << endl;
 
-        cout << "Fresh game state initialized - only Fa Cai Foundation Building unlocked!" << endl;
+            // Reset all high scores to 0
+            for (auto& entry : loongHighScores) {
+                entry.second = 0;
+            }
+
+            // Reset all difficulty unlocks except first dragon's first difficulty
+            for (auto& entry : difficultyUnlocked) {
+                if (entry.first.first == BASIC_LOONG && entry.first.second == FOUNDATION_BUILDING) {
+                    entry.second = true; // Keep first dragon's first difficulty unlocked
+                } else {
+                    entry.second = false; // Lock everything else
+                }
+            }
+
+            cout << "Fresh game state initialized - only Fa Cai Foundation Building unlocked!" << endl;
+        }
 #endif
     }
 
@@ -5908,6 +6296,237 @@ public:
 
             HandleDeath();
         }
+    }
+
+    // Latent upgrade display
+    void DrawLatentUpgradeInfo() {
+        int upgradeX = canvasWidth - 450;
+        int upgradeY = 300;
+
+        DrawText("Latent Upgrades:", upgradeX, upgradeY, 24, GOLD);
+        DrawText("(Total score across all runs)", upgradeX, upgradeY + 25, 16, GRAY);
+
+        // Debug: Show current selected level
+        char debugText[100];
+        sprintf(debugText, "Currently Selected: Level %d", selectedLatentLevel);
+        DrawText(debugText, upgradeX, upgradeY + 45, 16, YELLOW);
+
+        // Show upgrade level descriptions with clickable selection
+        vector<string> levelDescriptions = {
+            "Lv1: 1 own upgrade tile",
+            "Lv2: 1 own + 1 other tile",
+            "Lv3: 2 own + 1 other tile",
+            "Lv4: 3 own + 1 other tile",
+            "Lv5: 3 own + 2 other tiles"
+        };
+
+        DrawText("Click to select Latent Cultivation level:", upgradeX, upgradeY + 70, 14, YELLOW);
+
+        Vector2 mousePos = GetMousePosition();
+        for (int i = 0; i < 5; i++) {
+            int levelY = upgradeY + 95 + i * 22;
+            Rectangle levelRect = {(float)upgradeX, (float)(levelY - 2), 350, 20};
+
+            bool isUnlocked = (loongUpgradeLevel[selectedLoongType] >= i + 1);
+            bool isHovered = CheckCollisionPointRec(mousePos, levelRect);
+            bool isSelected = (selectedLatentLevel == i + 1);
+
+            Color descColor = LIGHTGRAY;
+            Color bgColor = BLACK;
+
+            if (isSelected) {
+                // Currently selected level - bright highlight
+                bgColor = GOLD;
+                descColor = BLACK;
+            } else if (isUnlocked) {
+                descColor = GREEN;
+                if (isHovered) {
+                    bgColor = DARKGREEN;
+                    descColor = WHITE;
+                }
+            } else {
+                descColor = DARKGRAY;
+                if (isHovered) {
+                    bgColor = MAROON;
+                }
+            }
+
+            // Draw background for hover effect
+            if (isHovered) {
+                DrawRectangleRec(levelRect, bgColor);
+                DrawRectangleLinesEx(levelRect, 1, WHITE);
+            }
+
+            // Draw level description
+            DrawText(levelDescriptions[i].c_str(), upgradeX + 5, levelY, 14, descColor);
+
+            // Draw unlock status
+            if (isUnlocked) {
+                DrawText("✓", upgradeX + 320, levelY, 14, GREEN);
+            } else {
+                DrawText("✗", upgradeX + 320, levelY, 14, RED);
+            }
+
+            // Handle clicks to select latent cultivation level
+            if (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                cout << "Mouse clicked on level " << (i + 1) << ", isUnlocked: " << isUnlocked << endl;
+                if (isUnlocked) {
+                    // Set the selected latent cultivation level
+                    selectedLatentLevel = i + 1;
+                    cout << "✅ SELECTED Latent Cultivation Level " << (i + 1) << " for tile generation! selectedLatentLevel = " << selectedLatentLevel << endl;
+                } else {
+                    cout << "❌ Latent Cultivation Level " << (i + 1) << " not unlocked yet!" << endl;
+                }
+            }
+        }
+
+        // Show current LOONG's progress prominently
+        LoongType currentLoong = selectedLoongType;
+        int currentLevel = loongUpgradeLevel[currentLoong];
+        int currentScore = loongTotalScores[currentLoong];
+
+        DrawText("Current LOONG:", upgradeX, upgradeY + 180, 20, YELLOW);
+
+        char currentText[150];
+        if (currentLevel >= 5) {
+            sprintf(currentText, "%s: MAX LEVEL (%d total)",
+                   availableLOONGs[selectedLoongIndex].name.c_str(), currentScore);
+        } else {
+            int nextThreshold = latentUpgradeThresholds[currentLevel];
+            sprintf(currentText, "%s: Lv%d - %d/%d to Lv%d",
+                   availableLOONGs[selectedLoongIndex].name.c_str(),
+                   currentLevel, currentScore, nextThreshold, currentLevel + 1);
+        }
+
+        DrawText(currentText, upgradeX, upgradeY + 205, 16, WHITE);
+
+        // Progress bar for current LOONG
+        if (currentLevel < 5) {
+            int nextThreshold = latentUpgradeThresholds[currentLevel];
+            int prevThreshold = (currentLevel > 0) ? latentUpgradeThresholds[currentLevel - 1] : 0;
+
+            float progress = (float)(currentScore - prevThreshold) / (float)(nextThreshold - prevThreshold);
+            progress = Clamp(progress, 0.0f, 1.0f);
+
+            Rectangle progressBg = {(float)upgradeX, (float)(upgradeY + 230), 300, 20};
+            Rectangle progressBar = {progressBg.x, progressBg.y, progressBg.width * progress, progressBg.height};
+
+            DrawRectangleRec(progressBg, DARKGRAY);
+            DrawRectangleRec(progressBar, BLUE);
+            DrawRectangleLinesEx(progressBg, 2, WHITE);
+
+            // Progress text
+            char progressText[50];
+            sprintf(progressText, "%.0f%%", progress * 100);
+            int textWidth = MeasureText(progressText, 16);
+            DrawText(progressText, upgradeX + 150 - textWidth/2, upgradeY + 232, 16, WHITE);
+        }
+    }
+
+    // Audio control functions
+    void ToggleMute() {
+        isMuted = !isMuted;
+        if (isMuted) {
+            SetMasterVolume(0.0f);
+            cout << "Audio muted" << endl;
+        } else {
+            SetMasterVolume(masterVolume);
+            cout << "Audio unmuted" << endl;
+        }
+    }
+
+    void SetVolume(float volume) {
+        masterVolume = Clamp(volume, 0.0f, 1.0f);
+        if (!isMuted) {
+            SetMasterVolume(masterVolume);
+            // Update individual music volumes
+            if (titleScreenMusic.stream.buffer != NULL) {
+                SetMusicVolume(titleScreenMusic, masterVolume);
+            }
+            if (loongSelectMusic.stream.buffer != NULL) {
+                SetMusicVolume(loongSelectMusic, masterVolume);
+            }
+            if (backgroundMusic.stream.buffer != NULL) {
+                SetMusicVolume(backgroundMusic, masterVolume);
+            }
+        }
+    }
+
+    // Latent upgrade system
+    void InitializeLatentUpgrades() {
+        for (int i = 0; i < 9; i++) {
+            loongTotalScores[(LoongType)i] = 0;
+            loongUpgradeLevel[(LoongType)i] = 0;
+        }
+        cout << "Latent upgrade system initialized" << endl;
+    }
+
+    void UpdateLoongTotalScore(int scoreGained) {
+        loongTotalScores[selectedLoongType] += scoreGained;
+
+        // Debug output
+        cout << "Updated " << availableLOONGs[selectedLoongIndex].name << " total score: " << loongTotalScores[selectedLoongType] << " (+" << scoreGained << ")" << endl;
+
+        // Check for upgrade level increases
+        int oldLevel = loongUpgradeLevel[selectedLoongType];
+        int newLevel = 0;
+
+        for (int i = 0; i < (int)latentUpgradeThresholds.size(); i++) {
+            if (loongTotalScores[selectedLoongType] >= latentUpgradeThresholds[i]) {
+                newLevel = i + 1;
+            }
+        }
+
+        if (newLevel > oldLevel) {
+            loongUpgradeLevel[selectedLoongType] = newLevel;
+            cout << "🎉 " << availableLOONGs[selectedLoongIndex].name << " reached upgrade level " << newLevel << "! Total score: " << loongTotalScores[selectedLoongType] << " 🎉" << endl;
+            // Save immediately when level increases
+            SaveProgressData();
+        }
+    }
+
+    bool HasLatentUpgrade() {
+        return loongUpgradeLevel[selectedLoongType] > 0;
+    }
+
+    void SpawnLatentCultivationUpgrades() {
+        if (selectedLatentLevel <= 0) return;
+
+        cout << "🌟 Queuing Latent Cultivation Level " << selectedLatentLevel << " LOONG evolution tiles!" << endl;
+
+        // Clear any existing queue
+        pendingLatentUpgrades.clear();
+
+        // Count how many upgrade tiles to spawn based on level
+        int ownUpgrades = 0;
+        int otherUpgrades = 0;
+
+        if (selectedLatentLevel >= 1) ownUpgrades = 1;
+        if (selectedLatentLevel >= 2) otherUpgrades = 1;
+        if (selectedLatentLevel >= 3) ownUpgrades = 2;
+        if (selectedLatentLevel >= 4) ownUpgrades = 3;
+        if (selectedLatentLevel >= 5) otherUpgrades = 2;
+
+        // Add own LOONG evolution tiles to queue
+        for (int i = 0; i < ownUpgrades; i++) {
+            pendingLatentUpgrades.push_back(selectedLoongType);
+        }
+
+        // Add other LOONG evolution tiles to queue
+        for (int i = 0; i < otherUpgrades; i++) {
+            // Pick a random other LOONG type
+            LoongType otherLoong;
+            do {
+                otherLoong = (LoongType)(rand() % 9);
+            } while (otherLoong == selectedLoongType);
+
+            pendingLatentUpgrades.push_back(otherLoong);
+        }
+
+        // Start the spawning timer
+        latentUpgradeSpawnTimer = 0.5f; // Start spawning after 0.5 seconds
+
+        cout << "✅ Queued " << pendingLatentUpgrades.size() << " LOONG evolution tiles for spawning!" << endl;
     }
 };
 
