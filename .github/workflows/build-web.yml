@@ -47,7 +47,17 @@ jobs:
 
         # Now compile our C++ game with the Raylib library
         echo "🔨 Compiling game..."
-        emcc main.cpp \
+
+        # Check if required files exist before compilation
+        echo "🔍 Pre-compilation checks:"
+        ls -la main.cpp || echo "❌ main.cpp not found"
+        ls -la Graphics/ || echo "❌ Graphics folder not found"
+        ls -la Sounds/ || echo "❌ Sounds folder not found"
+        ls -la raylib/src/libraylib.web.a || echo "❌ Raylib web library not found"
+        echo ""
+
+        # Attempt compilation
+        if emcc main.cpp \
           -std=c++17 \
           -O2 \
           -I./raylib/src \
@@ -63,7 +73,44 @@ jobs:
           -s LEGACY_GL_EMULATION=1 \
           --preload-file Graphics \
           --preload-file Sounds \
-          -o mahjong_loong.html
+          -o mahjong_loong.html; then
+          echo "✅ Primary compilation successful!"
+        else
+          echo "❌ Primary compilation failed, trying fallback..."
+
+          # Fallback: compile with Raylib source files directly
+          emcc main.cpp \
+            raylib/src/rcore.c \
+            raylib/src/rshapes.c \
+            raylib/src/rtextures.c \
+            raylib/src/rtext.c \
+            raylib/src/rmodels.c \
+            raylib/src/raudio.c \
+            raylib/src/utils.c \
+            -std=c++17 \
+            -O2 \
+            -I./raylib/src \
+            -I./raylib/src/external \
+            -DPLATFORM_WEB \
+            -DGRAPHICS_API_OPENGL_ES2 \
+            -s USE_GLFW=3 \
+            -s ASYNCIFY \
+            -s TOTAL_MEMORY=134217728 \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s FORCE_FILESYSTEM=1 \
+            -s ASSERTIONS=1 \
+            -s LEGACY_GL_EMULATION=1 \
+            --preload-file Graphics \
+            --preload-file Sounds \
+            -o mahjong_loong.html
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Fallback compilation successful!"
+          else
+            echo "❌ Both compilation attempts failed!"
+            exit 1
+          fi
+        fi
 
     - name: 📋 List generated files
       run: |
@@ -75,17 +122,66 @@ jobs:
 
     - name: 📁 Prepare deployment files
       run: |
+        # Debug: Check what files were actually created
+        echo "🔍 Checking build output:"
+        ls -la
+        echo ""
+        echo "🔍 Looking for game files:"
+        ls -la mahjong_loong.* || echo "No mahjong_loong files found"
+        echo ""
+
         # Create a clean deployment directory
         mkdir -p deploy
-        cp index.html deploy/ || echo "index.html not found"
-        cp mahjong_loong.html deploy/ || echo "mahjong_loong.html not found"
-        cp mahjong_loong.js deploy/ || echo "mahjong_loong.js not found"
-        cp mahjong_loong.wasm deploy/ || echo "mahjong_loong.wasm not found"
-        cp mahjong_loong.data deploy/ || echo "mahjong_loong.data not found"
-        cp README.md deploy/ || echo "README.md not found"
 
-        echo "Files prepared for deployment:"
+        # Copy files with better error handling
+        if [ -f "index.html" ]; then
+          cp index.html deploy/
+          echo "✅ Copied index.html"
+        else
+          echo "❌ index.html not found"
+        fi
+
+        if [ -f "mahjong_loong.html" ]; then
+          cp mahjong_loong.html deploy/
+          echo "✅ Copied mahjong_loong.html"
+        else
+          echo "❌ mahjong_loong.html not found - this is the main issue!"
+        fi
+
+        if [ -f "mahjong_loong.js" ]; then
+          cp mahjong_loong.js deploy/
+          echo "✅ Copied mahjong_loong.js"
+        else
+          echo "❌ mahjong_loong.js not found"
+        fi
+
+        if [ -f "mahjong_loong.wasm" ]; then
+          cp mahjong_loong.wasm deploy/
+          echo "✅ Copied mahjong_loong.wasm"
+        else
+          echo "❌ mahjong_loong.wasm not found"
+        fi
+
+        if [ -f "mahjong_loong.data" ]; then
+          cp mahjong_loong.data deploy/
+          echo "✅ Copied mahjong_loong.data"
+        else
+          echo "❌ mahjong_loong.data not found"
+        fi
+
+        if [ -f "README.md" ]; then
+          cp README.md deploy/
+          echo "✅ Copied README.md"
+        else
+          echo "❌ README.md not found"
+        fi
+
+        echo ""
+        echo "📁 Final deployment directory contents:"
         ls -la deploy/
+        echo ""
+        echo "📊 File sizes:"
+        du -h deploy/* || echo "No files in deploy directory"
 
     - name: 🚀 Deploy to GitHub Pages
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
