@@ -30,25 +30,27 @@ jobs:
       run: |
         echo "🐉 Building Mahjong Loong for web..."
 
+        # Use the fallback approach directly since it's more reliable
+        echo "🔄 Using direct compilation with Raylib source..."
+
         # Clone Raylib
         git clone --depth 1 https://github.com/raysan5/raylib.git
 
-        # Build Raylib for web
-        cd raylib/src
-        make PLATFORM=PLATFORM_WEB -B
-
-        # Copy the web library with correct name
-        cp libraylib.web.a ../../libraylib.a
-        cd ../../
-
-        # Compile the game
+        # Compile directly with all Raylib source files
         emcc main.cpp \
+          raylib/src/rcore.c \
+          raylib/src/rshapes.c \
+          raylib/src/rtextures.c \
+          raylib/src/rtext.c \
+          raylib/src/rmodels.c \
+          raylib/src/raudio.c \
+          raylib/src/utils.c \
           -std=c++17 \
           -O2 \
           -I./raylib/src \
-          -L. \
-          -lraylib \
+          -I./raylib/src/external \
           -DPLATFORM_WEB \
+          -DGRAPHICS_API_OPENGL_ES2 \
           -s USE_GLFW=3 \
           -s ASYNCIFY \
           -s TOTAL_MEMORY=134217728 \
@@ -58,36 +60,7 @@ jobs:
           -s LEGACY_GL_EMULATION=1 \
           --preload-file Graphics \
           --preload-file Sounds \
-          -o mahjong_loong.html || echo "Primary build failed"
-
-        # Fallback: Try with Raylib source files directly if linking failed
-        if [ ! -f "mahjong_loong.html" ]; then
-          echo "🔄 Trying fallback compilation with Raylib source..."
-          emcc main.cpp \
-            raylib/src/rcore.c \
-            raylib/src/rshapes.c \
-            raylib/src/rtextures.c \
-            raylib/src/rtext.c \
-            raylib/src/rmodels.c \
-            raylib/src/raudio.c \
-            raylib/src/utils.c \
-            -std=c++17 \
-            -O2 \
-            -I./raylib/src \
-            -I./raylib/src/external \
-            -DPLATFORM_WEB \
-            -DGRAPHICS_API_OPENGL_ES2 \
-            -s USE_GLFW=3 \
-            -s ASYNCIFY \
-            -s TOTAL_MEMORY=134217728 \
-            -s ALLOW_MEMORY_GROWTH=1 \
-            -s FORCE_FILESYSTEM=1 \
-            -s ASSERTIONS=1 \
-            -s LEGACY_GL_EMULATION=1 \
-            --preload-file Graphics \
-            --preload-file Sounds \
-            -o mahjong_loong.html
-        fi
+          -o mahjong_loong.html
         
     - name: 📋 List generated files
       run: |
