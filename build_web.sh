@@ -45,11 +45,36 @@ echo ""
 echo "🧹 Cleaning previous build..."
 rm -f mahjong_loong.js mahjong_loong.wasm mahjong_loong.data mahjong_loong.html
 
+# Setup Raylib for web if not already present
+if [ ! -f "libraylib.a" ] || [ ! -d "raylib" ]; then
+    echo "📦 Setting up Raylib for web..."
+
+    # Clone Raylib if not present
+    if [ ! -d "raylib" ]; then
+        git clone https://github.com/raysan5/raylib.git
+    fi
+
+    # Build Raylib for web
+    cd raylib/src
+    make PLATFORM=PLATFORM_WEB -B
+
+    # Copy the library
+    cp libraylib.a ../../
+    cd ../../
+
+    echo "✅ Raylib for web ready!"
+else
+    echo "✅ Raylib already available"
+fi
+
 # Compile to WebAssembly
 echo "📦 Compiling C++ to WebAssembly..."
 emcc main.cpp \
     -std=c++17 \
     -O2 \
+    -I./raylib/src \
+    -L. \
+    -lraylib \
     -s USE_GLFW=3 \
     -s ASYNCIFY \
     -s TOTAL_MEMORY=134217728 \

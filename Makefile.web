@@ -23,8 +23,10 @@ EMFLAGS = -s USE_GLFW=3 \
           --preload-file Graphics \
           --preload-file Sounds
 
-# Raylib for web (using emscripten port)
-RAYLIB_FLAGS = -s USE_GLFW=3 -s LEGACY_GL_EMULATION=1
+# Raylib paths and flags
+RAYLIB_PATH = ./raylib/src
+RAYLIB_LIB = ./libraylib.a
+RAYLIB_FLAGS = -I$(RAYLIB_PATH) -L. -lraylib -s USE_GLFW=3 -s LEGACY_GL_EMULATION=1
 
 # Output files
 OUTPUT_JS = $(PROJECT_NAME).js
@@ -35,10 +37,22 @@ OUTPUT_DATA = $(PROJECT_NAME).data
 # Default target
 all: web
 
-# Web build target
-web: $(OUTPUT_JS)
+# Setup Raylib for web
+setup-raylib: $(RAYLIB_LIB)
 
-$(OUTPUT_JS): $(SOURCES)
+$(RAYLIB_LIB):
+	@echo "📦 Setting up Raylib for web..."
+	@if [ ! -d "raylib" ]; then \
+		git clone https://github.com/raysan5/raylib.git; \
+	fi
+	@cd raylib/src && make PLATFORM=PLATFORM_WEB -B
+	@cp raylib/src/libraylib.a .
+	@echo "✅ Raylib for web ready!"
+
+# Web build target
+web: setup-raylib $(OUTPUT_JS)
+
+$(OUTPUT_JS): $(SOURCES) $(RAYLIB_LIB)
 	@echo "🐉 Building Mahjong Loong for Web..."
 	@echo "📦 Compiling C++ to WebAssembly..."
 	$(CC) $(SOURCES) $(CFLAGS) $(EMFLAGS) $(RAYLIB_FLAGS) -o $(OUTPUT_JS)
@@ -57,6 +71,12 @@ clean:
 	@echo "🧹 Cleaning web build files..."
 	rm -f $(OUTPUT_JS) $(OUTPUT_WASM) $(OUTPUT_HTML) $(OUTPUT_DATA)
 	@echo "✅ Clean complete!"
+
+# Clean everything including Raylib
+clean-all: clean
+	@echo "🧹 Cleaning everything including Raylib..."
+	rm -rf raylib libraylib.a
+	@echo "✅ Full clean complete!"
 
 # Install Emscripten (helper target)
 install-emscripten:
@@ -98,4 +118,4 @@ help:
 	@echo "  2. make serve"
 	@echo "  3. Open http://localhost:8000 in browser"
 
-.PHONY: all web clean install-emscripten serve help
+.PHONY: all web clean clean-all setup-raylib install-emscripten serve help

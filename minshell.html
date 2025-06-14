@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>🐉 Mahjong Loong</title>
+  <style>
+    body {
+      font-family: arial;
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(135deg, #2c3e50, #34495e);
+      color: white;
+      text-align: center;
+    }
+    
+    .emscripten { 
+      padding-right: 0; 
+      margin-left: auto; 
+      margin-right: auto; 
+      display: block; 
+    }
+    
+    canvas.emscripten { 
+      border: 0px none; 
+      background-color: black; 
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+    }
+    
+    .spinner {
+      height: 50px;
+      width: 50px;
+      margin: 0px auto;
+      animation: rotation .8s linear infinite;
+      border-left: 10px solid #f39c12;
+      border-right: 10px solid #f39c12;
+      border-bottom: 10px solid #f39c12;
+      border-top: 10px solid #e74c3c;
+      border-radius: 100%;
+      background-color: transparent;
+    }
+    
+    @keyframes rotation {
+      from {transform: rotate(0deg);}
+      to {transform: rotate(360deg);}
+    }
+    
+    #status {
+      display: inline-block;
+      vertical-align: top;
+      margin-top: 20px;
+      font-weight: bold;
+      color: #f39c12;
+    }
+    
+    #progress {
+      height: 20px;
+      width: 300px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      margin: 10px auto;
+    }
+    
+    h1 {
+      font-size: 2.5em;
+      margin: 20px 0;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+      background: linear-gradient(45deg, #f39c12, #e74c3c);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .controls {
+      margin: 20px auto;
+      max-width: 600px;
+      background: rgba(0,0,0,0.2);
+      padding: 15px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐉 Mahjong Loong</h1>
+  <p>A mystical dragon-themed Mahjong Snake game</p>
+  
+  <figure style="overflow:visible;" id="spinner">
+    <div class="spinner"></div>
+    <center style="margin-top:0.5em">
+      <strong id="status">🐉 Awakening the dragons...</strong>
+    </center>
+  </figure>
+  
+  <div class="emscripten" id="status">Downloading...</div>
+  <div class="emscripten">
+    <progress value="0" max="100" id="progress" hidden=1></progress>  
+  </div>
+  
+  <div class="emscripten_border">
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+  </div>
+  
+  <div class="controls">
+    <h3>🎮 Controls</h3>
+    <p><strong>Mouse:</strong> Move dragon | <strong>Mouse Wheel:</strong> Select tiles | <strong>Shift:</strong> Special power | <strong>Space:</strong> Shuffle</p>
+  </div>
+
+  <script type='text/javascript'>
+    var statusElement = document.getElementById('status');
+    var progressElement = document.getElementById('progress');
+    var spinnerElement = document.getElementById('spinner');
+
+    var Module = {
+      preRun: [],
+      postRun: [],
+      print: (function() {
+        return function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.log(text);
+        };
+      })(),
+      printErr: function(text) {
+        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+        console.error(text);
+      },
+      canvas: (function() {
+        var canvas = document.getElementById('canvas');
+        canvas.addEventListener("webglcontextlost", function(e) { 
+          alert('WebGL context lost. You will need to reload the page.'); 
+          e.preventDefault(); 
+        }, false);
+        return canvas;
+      })(),
+      setStatus: function(text) {
+        if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+        if (text === Module.setStatus.last.text) return;
+        var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+        var now = Date.now();
+        if (m && now - Module.setStatus.last.time < 30) return;
+        Module.setStatus.last.time = now;
+        Module.setStatus.last.text = text;
+        if (statusElement) statusElement.innerHTML = text;
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? '🐉 Loading... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : '✅ Ready!');
+        if (left == 0) {
+          if (spinnerElement) spinnerElement.style.display = 'none';
+        }
+      }
+    };
+    
+    Module.setStatus('🐉 Downloading...');
+    
+    window.onerror = function() {
+      Module.setStatus('❌ Exception thrown, see JavaScript console');
+      if (spinnerElement) spinnerElement.style.display = 'none';
+      Module.setStatus = function(text) {
+        if (text) console.error('[post-exception status] ' + text);
+      };
+    };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>
