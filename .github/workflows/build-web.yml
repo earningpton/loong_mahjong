@@ -1,0 +1,102 @@
+name: 🐉 Build Web Version
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: 📦 Setup Emscripten
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: latest
+        actions-cache-folder: 'emsdk-cache'
+        
+    - name: 🔍 Verify Emscripten installation
+      run: |
+        emcc --version
+        echo "Emscripten installed successfully!"
+        
+    - name: 🔨 Build web version
+      run: |
+        echo "🐉 Building Mahjong Loong for web..."
+        
+        # Compile to WebAssembly
+        emcc main.cpp \
+          -std=c++17 \
+          -O2 \
+          -s USE_GLFW=3 \
+          -s ASYNCIFY \
+          -s TOTAL_MEMORY=134217728 \
+          -s ALLOW_MEMORY_GROWTH=1 \
+          -s FORCE_FILESYSTEM=1 \
+          -s ASSERTIONS=1 \
+          -s LEGACY_GL_EMULATION=1 \
+          --shell-file web_shell.html \
+          --preload-file Graphics \
+          --preload-file Sounds \
+          -o mahjong_loong.js
+          
+        echo "✅ Build completed!"
+        
+    - name: 📋 List generated files
+      run: |
+        echo "Generated files:"
+        ls -la mahjong_loong.*
+        echo ""
+        echo "File sizes:"
+        du -h mahjong_loong.*
+        
+    - name: 🚀 Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: .
+        keep_files: true
+        include_files: |
+          index.html
+          mahjong_loong.html
+          mahjong_loong.js
+          mahjong_loong.wasm
+          mahjong_loong.data
+          Graphics/**
+          Sounds/**
+          README.md
+          
+    - name: 📤 Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mahjong-loong-web
+        path: |
+          index.html
+          mahjong_loong.html
+          mahjong_loong.js
+          mahjong_loong.wasm
+          mahjong_loong.data
+        retention-days: 30
+        
+    - name: 🎉 Build summary
+      run: |
+        echo "🐉 Mahjong Loong web build completed!"
+        echo ""
+        echo "📁 Generated files:"
+        echo "   - mahjong_loong.html (main game page)"
+        echo "   - mahjong_loong.js (JavaScript loader)"
+        echo "   - mahjong_loong.wasm (WebAssembly binary)"
+        echo "   - mahjong_loong.data (game assets)"
+        echo ""
+        echo "🌐 Your game will be available at:"
+        echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+        echo ""
+        echo "🎮 Direct game link:"
+        echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/mahjong_loong.html"

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐉 Mahjong Loong - Play in Browser</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            background: linear-gradient(45deg, #f39c12, #e74c3c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            margin: 10px 0;
+            opacity: 0.9;
+        }
+        
+        .game-container {
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        
+        canvas {
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 800px;
+        }
+        
+        .controls h3 {
+            color: #f39c12;
+            margin-top: 0;
+        }
+        
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .control-item {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .loading {
+            text-align: center;
+            font-size: 1.5em;
+            color: #f39c12;
+            margin: 20px 0;
+        }
+        
+        .download-links {
+            text-align: center;
+            margin-top: 20px;
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 600px;
+        }
+        
+        .download-links a {
+            display: inline-block;
+            margin: 10px;
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            transition: transform 0.3s ease;
+        }
+        
+        .download-links a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            canvas {
+                max-width: 100%;
+                height: auto;
+            }
+            
+            .control-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🐉 Mahjong Loong</h1>
+        <p>A mystical dragon-themed Mahjong Snake game</p>
+        <p>Choose your dragon, master the tiles, ascend to immortality!</p>
+    </div>
+    
+    <div class="game-container">
+        <div style="text-align: center; padding: 40px;">
+            <h2 style="color: #f39c12; margin-bottom: 20px;">🎮 Ready to Play?</h2>
+            <a href="mahjong_loong.html" style="
+                display: inline-block;
+                padding: 20px 40px;
+                background: linear-gradient(45deg, #e74c3c, #c0392b);
+                color: white;
+                text-decoration: none;
+                border-radius: 50px;
+                font-size: 1.5em;
+                font-weight: bold;
+                box-shadow: 0 10px 30px rgba(231, 76, 60, 0.3);
+                transition: all 0.3s ease;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            " onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(231, 76, 60, 0.4)'"
+               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 10px 30px rgba(231, 76, 60, 0.3)'">
+                🐉 PLAY MAHJONG LOONG 🐉
+            </a>
+            <p style="margin-top: 20px; opacity: 0.8;">
+                Click above to start your dragon adventure!<br>
+                <small>No download required - plays directly in your browser</small>
+            </p>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <h3>🎮 Game Controls</h3>
+        <div class="control-grid">
+            <div class="control-item">
+                <strong>🖱️ Mouse Movement</strong><br>
+                Move your dragon around the board
+            </div>
+            <div class="control-item">
+                <strong>🖱️ Mouse Wheel</strong><br>
+                Select and cycle through Mahjong tiles
+            </div>
+            <div class="control-item">
+                <strong>⇧ Shift Key</strong><br>
+                Activate your dragon's special power
+            </div>
+            <div class="control-item">
+                <strong>🔄 Space Bar</strong><br>
+                Shuffle tiles when stuck
+            </div>
+        </div>
+    </div>
+    
+    <div class="download-links">
+        <h3>💾 Download for Desktop</h3>
+        <a href="MahjongLoong_Windows.zip" download>🪟 Windows Version</a>
+        <a href="MahjongLoong_Mac.zip" download>🍎 Mac Version</a>
+    </div>
+
+    <script>
+        // Simple analytics or tracking can go here
+        console.log('🐉 Mahjong Loong - Landing Page Loaded');
+
+        // Add some interactive effects
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add sparkle effect or other enhancements here if desired
+            console.log('🎮 Ready to play Mahjong Loong!');
+        });
+    </script>
+</body>
+</html>
