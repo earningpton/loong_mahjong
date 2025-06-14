@@ -1,0 +1,83 @@
+🐉 MAHJONG LOONG - MAC INSTALLATION GUIDE 🐉
+
+Hi! This is a fun dragon-themed Mahjong game. Here's how to get it running:
+
+⚠️ SPECIAL NOTE FOR WECHAT/MESSENGER DOWNLOADS:
+If you downloaded this from WeChat, QQ, or another messenger app, the files
+may be in a deep folder path and lack proper permissions. You MUST:
+1. Copy the entire MahjongLoong_Mac folder to your Desktop or Documents
+2. Follow the TERMINAL METHOD below (double-click won't work initially)
+3. The error "permission denied" is normal - just follow the steps!
+
+🚀 EASY METHOD (DOUBLE-CLICK):
+1. Double-click "DOUBLE_CLICK_TO_INSTALL.command"
+   (If this doesn't work, see "PERMISSION FIX" below)
+2. Wait for installation to complete
+3. Double-click "PLAY_GAME.command" to play!
+
+🔧 TERMINAL METHOD (IF DOUBLE-CLICK FAILS):
+📋 STEP 1: Open Terminal
+- Press Cmd+Space, type "Terminal", press Enter
+- A black window will open - don't worry, this is normal!
+
+📋 STEP 2: Navigate to this folder
+- In Terminal, type: cd
+- Then drag this folder (MahjongLoong_Mac) into the Terminal window
+- Press Enter
+
+📋 STEP 3: Fix permissions (IMPORTANT!)
+- Type: chmod +x *.command
+- Press Enter
+- Type: chmod +x build_mac.sh
+- Press Enter
+
+📋 STEP 4: Run the installer
+- Type: ./build_mac.sh
+- Press Enter
+- It will automatically install everything needed
+
+📋 STEP 5: Play the game!
+- Type: ./MahjongLoong
+- Press Enter
+- Enjoy the game!
+
+🔐 PERMISSION FIX (IF DOUBLE-CLICK DOESN'T WORK):
+If you get "permission denied" when double-clicking:
+1. Open Terminal (Cmd+Space, type "Terminal")
+2. Type: cd
+3. Drag the MahjongLoong_Mac folder into Terminal
+4. Press Enter
+5. Type: chmod +x *.command
+6. Press Enter
+7. Type: chmod +x build_mac.sh
+8. Press Enter
+9. Close Terminal and try double-clicking again
+
+🎮 GAME CONTROLS:
+- Mouse: Move the dragon
+- Mouse wheel: Select tiles
+- SHIFT: Use dragon special power
+- SPACE: Shuffle tiles when stuck
+
+🐉 GAME FEATURES:
+- 9 different mythological dragons
+- 5 difficulty levels each
+- Beautiful music and sound effects
+- Your progress saves automatically
+
+❓ IF SOMETHING GOES WRONG:
+1. Make sure you're connected to the internet (for installation)
+2. Make sure you have macOS 10.12 or later
+3. If you get "g++ command not found", run: xcode-select --install
+4. If Raylib fails to install, run: brew install raylib
+5. Send a screenshot of any errors to your partner
+
+🆘 COMMON ERROR FIXES:
+• "permission denied" → Follow the PERMISSION FIX steps above
+• "command not found" → Install Xcode tools: xcode-select --install
+• "main.cpp not found" → Make sure you're in the right folder
+• "brew command not found" → Install Homebrew from https://brew.sh
+
+That's it! Have fun playing! 🎉
+
+P.S. The game has 9 dragons to unlock - try to collect them all!

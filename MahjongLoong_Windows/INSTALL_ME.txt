@@ -1,0 +1,44 @@
+🐉 MAHJONG LOONG - SUPER EASY WINDOWS INSTALLATION 🐉
+
+Hi! This is a fun dragon-themed Mahjong game. Here's how to get it running:
+
+📋 OPTION 1: EASY WAY (If you have a C++ compiler)
+- Double-click "DOUBLE_CLICK_TO_INSTALL.bat"
+- Wait for it to compile the game
+- Double-click "PLAY_GAME.bat" to play!
+
+📋 OPTION 2: SUPER EASY WAY (Ask your friend)
+- Ask your friend to send you a pre-compiled .exe file
+- Just put the .exe in this folder and double-click it!
+
+🔧 IF YOU NEED TO INSTALL A COMPILER:
+1. Download MinGW-w64 from: https://www.mingw-w64.org/downloads/
+2. Or download MSYS2 from: https://www.msys2.org/
+3. Or install Visual Studio from: https://visualstudio.microsoft.com/
+
+🎮 GAME CONTROLS:
+- Mouse: Move the dragon
+- Mouse wheel: Select tiles
+- SHIFT: Use dragon special power
+- SPACE: Shuffle tiles when stuck
+
+🐉 GAME FEATURES:
+- 9 different mythological dragons
+- 5 difficulty levels each
+- Beautiful music and sound effects
+- Your progress saves automatically
+
+🎯 GAME GOAL:
+- Collect tiles to form Mahjong hands (3 groups + 1 pair)
+- Or get LOONG wins (1-9 consecutive tiles) for 3x score!
+- Each dragon has unique special powers
+- Unlock new dragons by reaching level 4
+
+❓ IF SOMETHING GOES WRONG:
+1. Make sure you have a C++ compiler installed
+2. Make sure Raylib is installed at C:\raylib\
+3. Or just ask your friend for a pre-compiled version!
+
+That's it! Have fun playing! 🎉
+
+P.S. The game starts fresh - you'll need to unlock all 9 dragons yourself!
