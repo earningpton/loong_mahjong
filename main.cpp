@@ -18,11 +18,6 @@
 
 using namespace std;
 
-static bool allowMove = false;
-Color green = {173, 204, 96, 255};
-Color darkGreen = {43, 51, 24, 255};
-Color lightGreen = {200, 230, 150, 255};
-Color currentBackgroundColor = {200, 230, 150, 255};
 
 // Define missing color constants
 #ifndef LIGHTBLUE
@@ -109,11 +104,11 @@ int cellCount = 20;
 int gameAreaOffset = 150;
 
 // Total canvas settings (outer area for mouse control + UI)
-int canvasWidth = 1600;  // Increased for UI panel
+int canvasWidth = 1800;  // Increased further to prevent UI overlap
 int canvasHeight = 1000;
 
 // UI panel settings
-int uiPanelX = 1200;  // Start of UI panel
+int uiPanelX = 1400;  // Shifted right to give game area more room
 int uiPanelWidth = 400;
 
 double lastUpdateTime = 0;
@@ -1176,6 +1171,8 @@ public:
 
     void Update()
     {
+        if (direction.x == 0 && direction.y == 0) return; // Hard stop: don't move or shrink
+
         body.push_front(Vector2Add(body[0], direction));
         if (addSegment == true)
         {
@@ -1225,6 +1222,32 @@ public:
 
         // Prevent 180-degree turns
         if (!(newDirection.x == -direction.x && newDirection.y == -direction.y))
+        {
+            direction = newDirection;
+        }
+    }
+
+    void UpdateDirectionFromGamepad(int gamepad)
+    {
+        Vector2 newDirection = {0, 0};
+        float stickX = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_LEFT_X);
+        float stickY = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_LEFT_Y);
+        float threshold = 0.5f;
+
+        if (IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_UP)) newDirection = {0, -1};
+        else if (IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_DOWN)) newDirection = {0, 1};
+        else if (IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_LEFT)) newDirection = {-1, 0};
+        else if (IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) newDirection = {1, 0};
+        else if (abs(stickX) > threshold || abs(stickY) > threshold) {
+            if (abs(stickX) > abs(stickY)) {
+                newDirection.x = (stickX > 0) ? 1 : -1;
+            } else {
+                newDirection.y = (stickY > 0) ? 1 : -1;
+            }
+        }
+
+        if ((newDirection.x != 0 || newDirection.y != 0) && 
+            !(newDirection.x == -direction.x && newDirection.y == -direction.y))
         {
             direction = newDirection;
         }
@@ -1360,7 +1383,19 @@ public:
     Food food = Food(snake.body);
     GameState gameState = TITLE_SCREEN;
     int score = 0;
+    bool allowMove = false;
+    Color green = {173, 204, 96, 255};
+    Color darkGreen = {43, 51, 24, 255};
+    Color lightGreen = {200, 230, 150, 255};
+    Color currentBackgroundColor = {200, 230, 150, 255};
     int highScore = 0;
+
+    // Input and Gamepad state
+    float selectRepeatTimer = 0.0f;
+    const float REPEAT_DELAY = 0.3f;
+    const float REPEAT_RATE = 0.05f;
+    bool stickUp = false, stickDown = false, stickLeft = false, stickRight = false;
+    bool stickUpLast = false, stickDownLast = false, stickLeftLast = false, stickRightLast = false;
 
     // Difficulty and High Score System
     DifficultyLevel selectedDifficulty = FOUNDATION_BUILDING;
@@ -1390,6 +1425,8 @@ public:
     int ornateLevel = LEVEL_1_NONE;
     int totalWins = 0; // Track total KONG + Mahjong wins for tile expansion
     int currentTileCount = 4; // Starting with 4 tiles
+    int waterHealingAmount = 0;
+    int windLengthReduction = 0;
     Sound eatSound;
     Sound wallSound;
     Sound mahjongWinSound;
@@ -1845,10 +1882,10 @@ public:
         // FIRE LOONG - Aggressive Damage Dealer (Red Dragon)
         LoongData fireLoong(FIRE_LOONG, "Hong Zhong - Red Dragon", "Crimson Dragon of success\nand fiery determination",
                            {220, 20, 60, 255}, {255, 69, 0, 255}); // Deep Red & Orange Red
-        fireLoong.upgrades.push_back(LoongUpgrade("Blazing Mahjong", "Mahjong +40% score +5% speed per level", 4));
+        fireLoong.upgrades.push_back(LoongUpgrade("Blazing Mahjong", "Mahjong +50% score +5% speed per level", 4));
         fireLoong.upgrades.push_back(LoongUpgrade("Inferno KONG", "KONG +75% score +10% speed per level", 3));
         fireLoong.upgrades.push_back(LoongUpgrade("Speed Demon", "+20% speed +20% score +1 extra life", 3));
-        fireLoong.upgrades.push_back(LoongUpgrade("Burning Tiles", "SHIFT: Change to most held: 12->10->8 tiles", 3));
+        fireLoong.upgrades.push_back(LoongUpgrade("Burning Tiles", "SHIFT: Change to most held: 12->9->6 tiles", 3));
         fireLoong.upgrades.push_back(LoongUpgrade("Blazing Rebirth", "Phoenix rebirth +extra score: 1->2->3 charges", 3));
         availableLOONGs.push_back(fireLoong);
 
@@ -1858,8 +1895,8 @@ public:
         waterLoong.upgrades.push_back(LoongUpgrade("Flowing Mahjong", "Mahjong +20% score + heal 1 length per level", 5));
         waterLoong.upgrades.push_back(LoongUpgrade("Tidal KONG", "KONG +30% score + 2 extra lives per level", 3));
         waterLoong.upgrades.push_back(LoongUpgrade("Tsunami Shield", "Wall immunity +3 uses per level", 4));
-        waterLoong.upgrades.push_back(LoongUpgrade("Healing Waters", "Reduce length by 2 every 5 fruits per level", 4));
-        waterLoong.upgrades.push_back(LoongUpgrade("Ocean Wisdom", "SHIFT: See next 3 tiles: 8->6->4 tiles", 3));
+        waterLoong.upgrades.push_back(LoongUpgrade("Healing Waters", "Reduce length by 2->4->6 every 5 fruits", 4));
+        waterLoong.upgrades.push_back(LoongUpgrade("Tidal Wave", "SHIFT: Heal, Shuffle & Shield: 8 tiles", 3));
         availableLOONGs.push_back(waterLoong);
 
         // WHITE LOONG - Purity and Zero Dragon (Bai Ban - White Tile)
@@ -1868,7 +1905,7 @@ public:
         whiteLoong.upgrades.push_back(LoongUpgrade("Pure Mahjong", "1->2->3 tiles become 0 after Mahjong", 3));
         whiteLoong.upgrades.push_back(LoongUpgrade("Sacred KONG", "KONG +40%, four 0 KONG +200%", 3));
         whiteLoong.upgrades.push_back(LoongUpgrade("Divine Shield", "Remove 3->2->1 zeros on death", 3));
-        whiteLoong.upgrades.push_back(LoongUpgrade("Zero Mastery", "SHIFT: Turn next tile to 0: 15 tiles", 1));
+        whiteLoong.upgrades.push_back(LoongUpgrade("Zero Mastery", "SHIFT: Turn next tile to 0: 10 tiles", 3));
         whiteLoong.upgrades.push_back(LoongUpgrade("Purification", "Turn leftmost tile to 0: 15->10->5", 3));
         availableLOONGs.push_back(whiteLoong);
 
@@ -1885,7 +1922,7 @@ public:
         // WIND LOONG - Fast and Agile (Azure Dragon)
         LoongData windLoong(WIND_LOONG, "Qing Long - Azure Dragon", "Blue Dragon of the East\nand swift winds",
                            {0, 191, 255, 255}, {135, 206, 250, 255}); // Deep Sky Blue & Light Sky Blue
-        windLoong.upgrades.push_back(LoongUpgrade("Gale Mahjong", "Mahjong +50% score +25% speed per level", 5));
+        windLoong.upgrades.push_back(LoongUpgrade("Gale Mahjong", "Mahjong +60% score +25% speed per level", 5));
         windLoong.upgrades.push_back(LoongUpgrade("Whirlwind KONG", "KONG +25% score + probability boost per level", 4));
         windLoong.upgrades.push_back(LoongUpgrade("Lightning Speed", "+25% speed reduce length 1->2->3 every 5 tiles", 3));
         windLoong.upgrades.push_back(LoongUpgrade("Tornado Tiles", "SHIFT: Replace pointed tile: 6 tiles", 4));
@@ -1898,7 +1935,7 @@ public:
         shadowLoong.upgrades.push_back(LoongUpgrade("Void Mahjong", "Mahjong +35% score hide 3->6->9 tiles from pool", 3));
         shadowLoong.upgrades.push_back(LoongUpgrade("Dark KONG", "KONG +80% score discard 1->2->3 tiles on KONG", 3));
         shadowLoong.upgrades.push_back(LoongUpgrade("Shadow Clone", "Duplicate Mahjong win once per level", 2));
-        shadowLoong.upgrades.push_back(LoongUpgrade("Nightmare Tiles", "SHIFT: Force next tile same: 8 tiles", 3));
+        shadowLoong.upgrades.push_back(LoongUpgrade("Nightmare Tiles", "SHIFT: Force next tile same: 8->6->4 tiles", 3));
         shadowLoong.upgrades.push_back(LoongUpgrade("Dimensional Rift", "Teleport on collision +3 charges per level", 3));
         availableLOONGs.push_back(shadowLoong);
 
@@ -1908,7 +1945,7 @@ public:
         celestialLoong.upgrades.push_back(LoongUpgrade("Divine Mahjong", "Mahjong +50% score per level", 3));
         celestialLoong.upgrades.push_back(LoongUpgrade("Heavenly KONG", "KONG +75% score per level", 3));
         celestialLoong.upgrades.push_back(LoongUpgrade("Celestial Rebirth", "+2 celestial rebirths per level", 3));
-        celestialLoong.upgrades.push_back(LoongUpgrade("Cosmic Wisdom", "SHIFT: Instant MAHJONG redraw: 20 tiles", 1));
+        celestialLoong.upgrades.push_back(LoongUpgrade("Cosmic Wisdom", "SHIFT: Instant MAHJONG redraw: 20->15->10 tiles", 3));
         celestialLoong.upgrades.push_back(LoongUpgrade("Transcendence", "LOONG multiplier: 4x->5x->6x", 3));
         availableLOONGs.push_back(celestialLoong);
 
@@ -1918,7 +1955,7 @@ public:
         patienceLoong.upgrades.push_back(LoongUpgrade("Calm Mahjong", "+30% score, -10% speed per level", 3));
         patienceLoong.upgrades.push_back(LoongUpgrade("Steady KONG", "+35% score, immunity on KONG", 3));
         patienceLoong.upgrades.push_back(LoongUpgrade("Meditation", "+2 wall immunity per level", 3));
-        patienceLoong.upgrades.push_back(LoongUpgrade("Pause Control", "SHIFT: Pause & change direction: 3 tiles", 4));
+        patienceLoong.upgrades.push_back(LoongUpgrade("Pause Control", "SHIFT: Pause & change direction: 3->2->1 tiles", 4));
         patienceLoong.upgrades.push_back(LoongUpgrade("Patience Mastery", "Slower = higher score multiplier", 3));
         availableLOONGs.push_back(patienceLoong);
 
@@ -1949,9 +1986,9 @@ public:
                 break;
 
             case WHITE_LOONG:
-                shiftPowerName = "Future Sight";
-                shiftPowerDescription = "Lock next 3 tiles visible";
-                shiftCooldownMax = 15; // 15 tiles cooldown
+                shiftPowerName = "Zero Mastery";
+                shiftPowerDescription = "Turn next tile to 0";
+                shiftCooldownMax = 10; // Reduced from 15
                 break;
 
             case EARTH_LOONG:
@@ -2395,7 +2432,7 @@ public:
     void ApplyFireLoongUpgrade(int upgradeIndex, int level) {
         switch (upgradeIndex) {
             case 0: // Blazing Mahjong - +40% score +5% speed per level
-                mahjongScoreMultiplier += 0.4f;
+                mahjongScoreMultiplier += 0.5f;
                 currentSpeedMultiplier *= 1.05f;
                 cout << ">>> Blazing Mahjong Level " << level << ": Mahjong " << mahjongScoreMultiplier << "x, speed " << (currentSpeedMultiplier * 100) << "%!" << endl;
                 break;
@@ -2444,8 +2481,8 @@ public:
                 cout << ">>> Tsunami Shield Level " << level << ": " << wallImmunities << " wall collision immunities!" << endl;
                 break;
             case 3: // Healing Waters - Reduce length
-                // Implement healing effect in fruit consumption
-                cout << ">>> Healing Waters Level " << level << ": Reduce length by 2 every 5 fruits!" << endl;
+                waterHealingAmount = 2 * level;
+                cout << ">>> Healing Waters Level " << level << ": Reduce length by " << waterHealingAmount << " every 5 fruits!" << endl;
                 break;
             case 4: // Ocean Wisdom - SHIFT power (see next 3 tiles)
                 // This is now a SHIFT power, no passive effect
@@ -2471,7 +2508,7 @@ public:
                 break;
             case 3: // Zero Mastery - SHIFT power enhanced (cooldown reduction)
                 if (selectedLoongType == WHITE_LOONG) {
-                    shiftCooldownMax = max(3.0f, 8.0f - (level * 2.0f)); // 8, 6, 4, 3 tiles
+                    shiftCooldownMax = max(2, 10 - (level * 2)); // 8, 6, 4 tiles
                     cout << ">>> Zero Mastery Level " << level << ": SHIFT cooldown reduced to " << shiftCooldownMax << " tiles!" << endl;
                 }
                 break;
@@ -2517,7 +2554,7 @@ public:
     void ApplyWindLoongUpgrade(int upgradeIndex, int level) {
         switch (upgradeIndex) {
             case 0: // Gale Mahjong - +50% score +25% speed (buffed for speed penalty)
-                mahjongScoreMultiplier += 0.5f;
+                mahjongScoreMultiplier += 0.6f;
                 currentSpeedMultiplier *= 1.25f;
                 cout << ">>> Gale Mahjong Level " << level << ": Mahjong " << mahjongScoreMultiplier << "x + Speed " << (currentSpeedMultiplier * 100) << "%!" << endl;
                 break;
@@ -2528,7 +2565,8 @@ public:
                 break;
             case 2: // Lightning Speed - +25% speed, reduce length 1->2->3 every 5 tiles
                 currentSpeedMultiplier *= 1.25f;
-                cout << ">>> Lightning Speed Level " << level << ": Speed " << (currentSpeedMultiplier * 100) << "%, reduce length " << level << " every 5 tiles!" << endl;
+                windLengthReduction = level;
+                cout << ">>> Lightning Speed Level " << level << ": Speed " << (currentSpeedMultiplier * 100) << "%, reduce length " << windLengthReduction << " every 5 tiles!" << endl;
                 break;
             case 3: // Tornado Tiles - SHIFT power (instantly get tile)
                 // This is now a SHIFT power
@@ -2587,8 +2625,8 @@ public:
                 break;
             case 3: // Cosmic Wisdom - SHIFT power (instant MAHJONG): 30s cooldown
                 if (selectedLoongType == CELESTIAL_LOONG) {
-                    shiftCooldownMax = 30.0f; // Longest cooldown
-                    cout << ">>> Cosmic Wisdom Level " << level << ": SHIFT power enhanced (30s cooldown)!" << endl;
+                shiftCooldownMax = max(10, 25 - (level * 5)); // Scales down: 20 -> 15 -> 10 tiles
+                cout << ">>> Cosmic Wisdom Level " << level << ": SHIFT cooldown reduced to " << shiftCooldownMax << " tiles!" << endl;
                 }
                 break;
             case 4: // Transcendence - LOONG multiplier (4x->5x->6x)
@@ -3246,6 +3284,21 @@ public:
         }
     }
 
+    string GetPowerName(LoongType t) {
+        switch(t) {
+            case BASIC_LOONG: return "Tile Wisdom";
+            case FIRE_LOONG: return "Burning Tiles";
+            case WATER_LOONG: return "Tidal Wave";
+            case WHITE_LOONG: return "Zero Mastery";
+            case EARTH_LOONG: return "Granite Will";
+            case WIND_LOONG: return "Tornado Tiles";
+            case SHADOW_LOONG: return "Nightmare Tiles";
+            case CELESTIAL_LOONG: return "Cosmic Wisdom";
+            case PATIENCE_LOONG: return "Pause Control";
+            default: return "Unknown";
+        }
+    }
+
     void UpdateSnakeLength() {
         snakeLength = snake.body.size();
     }
@@ -3670,15 +3723,13 @@ public:
             }
         }
 
-        if (gameState == PLAYING && !showChoiceWindow && !showLoongUpgrade && !isInExtraLifeMode) // Pause game during choice window, LOONG upgrade, or extra life
+        if (gameState == PLAYING && !showChoiceWindow && !showLoongUpgrade && !isInExtraLifeMode && !isPaused) // Pause game during choice window, LOONG upgrade, extra life, or ability pause
         {
-            // Update snake direction based on mouse position
-            Vector2 mousePos = GetMousePosition();
-            snake.UpdateDirectionFromMouse(mousePos);
-
             snake.Update();
             CheckCollisionWithFood();
+            if (isInExtraLifeMode || gameState != PLAYING) return; // Stop immediately if life used
             CheckCollisionWithEdges();
+            if (isInExtraLifeMode || gameState != PLAYING) return; // Stop immediately if life used
             CheckCollisionWithTail();
         }
     }
@@ -3692,9 +3743,35 @@ public:
 
     void HandleInput()
     {
+        int gamepad = 0;
+        bool gpAvailable = IsGamepadAvailable(gamepad);
+
+        // Input abstraction for menu navigation
+        bool menuUp = IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_UP));
+        bool menuDown = IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_DOWN));
+        bool menuLeft = IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_LEFT));
+        bool menuRight = IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_RIGHT));
+        bool menuConfirm = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN));
+        bool menuBack = IsKeyPressed(KEY_BACKSPACE) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT));
+
+        // Handle gamepad sticks
+        if (gpAvailable) {
+            float threshold = 0.5f;
+            stickUp = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_LEFT_Y) < -threshold;
+            stickDown = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_LEFT_Y) > threshold;
+            stickLeft = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_LEFT_X) < -threshold;
+            stickRight = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_LEFT_X) > threshold;
+
+            if (stickUp && !stickUpLast) menuUp = true;
+            if (stickDown && !stickDownLast) menuDown = true;
+            if (stickLeft && !stickLeftLast) menuLeft = true;
+            if (stickRight && !stickRightLast) menuRight = true;
+        }
+
         if (gameState == TITLE_SCREEN) {
             // Any click goes to LOONG selection
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) ||
+                (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN))) {
                 gameState = LOONG_SELECTION;
                 cout << ">>> Entering LOONG Selection Screen! <<<" << endl;
             }
@@ -3726,7 +3803,7 @@ public:
             }
 
             // Handle keyboard navigation (only unlocked dragons)
-            if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) {
+            if (menuLeft) {
                 int newIndex = selectedLoongIndex;
                 do {
                     newIndex = (newIndex - 1 + availableLOONGs.size()) % availableLOONGs.size();
@@ -3738,7 +3815,7 @@ public:
                     }
                 } while (newIndex != selectedLoongIndex);
             }
-            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) {
+            if (menuRight) {
                 int newIndex = selectedLoongIndex;
                 do {
                     newIndex = (newIndex + 1) % availableLOONGs.size();
@@ -3750,7 +3827,7 @@ public:
                     }
                 } while (newIndex != selectedLoongIndex);
             }
-            if (IsKeyPressed(KEY_UP)) {
+            if (menuUp) {
                 int newIndex = selectedLoongIndex;
                 do {
                     newIndex = (newIndex - 3 + availableLOONGs.size()) % availableLOONGs.size();
@@ -3762,7 +3839,7 @@ public:
                     }
                 } while (newIndex != selectedLoongIndex);
             }
-            if (IsKeyPressed(KEY_DOWN)) {
+            if (menuDown) {
                 int newIndex = selectedLoongIndex;
                 do {
                     newIndex = (newIndex + 3) % availableLOONGs.size();
@@ -3776,7 +3853,7 @@ public:
             }
 
             // Confirm selection with Enter or mouse click (only if unlocked)
-            if (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 pair<LoongType, DifficultyLevel> dragonKey = {(LoongType)selectedLoongIndex, FOUNDATION_BUILDING};
                 bool isUnlocked = difficultyUnlocked[dragonKey];
 
@@ -3829,7 +3906,7 @@ public:
             }
 
             // Handle keyboard navigation
-            if (IsKeyPressed(KEY_UP)) {
+            if (menuUp) {
                 // Find previous unlocked difficulty
                 for (int i = selectedDifficulty - 1; i >= 0; i--) {
                     pair<LoongType, DifficultyLevel> diffKey = {selectedLoongType, (DifficultyLevel)i};
@@ -3839,7 +3916,7 @@ public:
                     }
                 }
             }
-            if (IsKeyPressed(KEY_DOWN)) {
+            if (menuDown) {
                 // Find next unlocked difficulty
                 for (int i = selectedDifficulty + 1; i < 5; i++) {
                     pair<LoongType, DifficultyLevel> diffKey = {selectedLoongType, (DifficultyLevel)i};
@@ -3851,12 +3928,12 @@ public:
             }
 
             // Back button functionality (use BACKSPACE instead of ESC)
-            if (IsKeyPressed(KEY_BACKSPACE)) {
+            if (menuBack) {
                 gameState = LOONG_SELECTION;
             }
 
             // Confirm difficulty selection
-            if (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 // Check if clicking on a valid difficulty option
                 bool validClick = false;
                 for (int i = 0; i < 5; i++) {
@@ -3871,14 +3948,14 @@ public:
                             if (CheckCollisionPointRec(mousePos, diffRect)) {
                                 validClick = true;
                             }
-                        } else if (IsKeyPressed(KEY_ENTER)) {
+                        } else if (menuConfirm) {
                             validClick = true;
                         }
                         break;
                     }
                 }
 
-                if (validClick || IsKeyPressed(KEY_ENTER)) {
+                if (validClick || menuConfirm) {
                     ApplyDifficultySettings();
                     gameState = INSTRUCTION_SCREEN;
                 }
@@ -3886,7 +3963,7 @@ public:
         }
         else if (gameState == INSTRUCTION_SCREEN) {
             // Wait for player to click to start countdown
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 StartCountdown();
                 // Start LOONG theme music when countdown begins
                 if (musicLoaded && backgroundMusic.stream.buffer != NULL) {
@@ -3908,8 +3985,11 @@ public:
                 // Let player move mouse to reposition, then click to continue
                 Vector2 mousePos = GetMousePosition();
                 snake.UpdateDirectionFromMouse(mousePos);
+                if (gpAvailable) {
+                    snake.UpdateDirectionFromGamepad(gamepad);
+                }
 
-                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     isInExtraLifeMode = false;
                     cout << "Extra life resumed!" << endl;
                 }
@@ -3918,10 +3998,10 @@ public:
             else if (showLoongUpgrade) {
                 // Arrow keys for upgrade selection (dynamic based on available choices)
                 int numChoices = upgradeChoices.size();
-                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+                if (menuUp) {
                     loongUpgradeSelection = (loongUpgradeSelection - 1 + numChoices) % numChoices;
                 }
-                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+                if (menuDown) {
                     loongUpgradeSelection = (loongUpgradeSelection + 1) % numChoices;
                 }
 
@@ -3949,7 +4029,7 @@ public:
                 }
 
                 // Confirm upgrade selection
-                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     ApplyLoongUpgrade(loongUpgradeSelection);
                     cout << "🐉 LOONG UPGRADE APPLIED! 🐉" << endl;
                 }
@@ -3987,13 +4067,13 @@ public:
                 }
 
                 // Left click to confirm choice
-                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     ApplyChoice(selectedChoice);
                     showChoiceWindow = false;
                 }
 
                 // Enter/Space to confirm choice
-                if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                if (menuConfirm) {
                     ApplyChoice(selectedChoice);
                     showChoiceWindow = false;
                 }
@@ -4030,13 +4110,34 @@ public:
                     rightClickHoldTime = 0.0f;
                 }
 
-                // Keep A and D as backup controls
-                if (IsKeyPressed(KEY_A)) {
-                    mahjongTiles.MoveArrowLeft();
+                // --- Tile Selection Hold Logic ---
+                bool selectLeft = IsKeyDown(KEY_Q) || (gpAvailable && (IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1) || IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_2)));
+                bool selectRight = IsKeyDown(KEY_E) || (gpAvailable && (IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1) || IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_2)));
+
+                if (selectLeft || selectRight) {
+                    selectRepeatTimer += GetFrameTime();
+                    if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E) || (gpAvailable && (IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1) || IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)))) {
+                        if (selectLeft) mahjongTiles.MoveArrowLeft();
+                        if (selectRight) mahjongTiles.MoveArrowRight();
+                        selectRepeatTimer = 0.0f;
+                    } else if (selectRepeatTimer >= REPEAT_DELAY) {
+                        if (selectLeft) mahjongTiles.MoveArrowLeft();
+                        if (selectRight) mahjongTiles.MoveArrowRight();
+                        selectRepeatTimer = REPEAT_DELAY - REPEAT_RATE;
+                    }
+                } else {
+                    selectRepeatTimer = 0.0f;
                 }
-                if (IsKeyPressed(KEY_D)) {
-                    mahjongTiles.MoveArrowRight();
-                }
+
+                // --- Snake Movement Controls ---
+                if (menuUp && snake.direction.y != 1) snake.direction = {0, -1};
+                if (menuDown && snake.direction.y != -1) snake.direction = {0, 1};
+                if (menuLeft && snake.direction.x != 1) snake.direction = {-1, 0};
+                if (menuRight && snake.direction.x != -1) snake.direction = {1, 0};
+
+                // Controller tile selection
+                if (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1)) mahjongTiles.MoveArrowLeft();
+                if (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) mahjongTiles.MoveArrowRight();
 
                 // Mouse wheel support for tile selection (same as A/D)
                 float wheelMove = GetMouseWheelMove();
@@ -4047,12 +4148,12 @@ public:
                 }
 
                 // Space bar for reshuffle
-                if (IsKeyPressed(KEY_SPACE)) {
+                if (IsKeyPressed(KEY_SPACE) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_FACE_UP))) {
                     mahjongTiles.ReshuffleTiles();
                 }
 
                 // SHIFT key for dragon special power
-                if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) {
+                if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_FACE_LEFT))) {
                     if (shiftPowerReady) {
                         ActivateShiftPower();
                     } else {
@@ -4064,7 +4165,7 @@ public:
         }
         else if (gameState == GAME_OVER) {
             // Return to LOONG selection for new game
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 // Reset game state completely
                 ResetGame();
                 gameState = LOONG_SELECTION;
@@ -4073,7 +4174,7 @@ public:
         }
         else if (gameState == CULTIVATION_SUCCESS) {
             // Return to LOONG selection after cultivation success
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+            if (menuConfirm || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                 // Reset game state completely like game over
                 ResetGame();
                 gameState = LOONG_SELECTION;
@@ -4082,7 +4183,7 @@ public:
         }
 
         // Global audio controls (work in any state)
-        if (IsKeyPressed(KEY_M)) {
+        if (IsKeyPressed(KEY_M) || (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_MIDDLE_RIGHT))) {
             ToggleMute();
         }
         if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) { // + key
@@ -4091,6 +4192,12 @@ public:
         if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) { // - key
             SetVolume(masterVolume - 0.1f);
         }
+
+        // Update last stick states for next frame
+        stickUpLast = stickUp;
+        stickDownLast = stickDown;
+        stickLeftLast = stickLeft;
+        stickRightLast = stickRight;
     }
 
     void StartCountdown() {
@@ -4171,14 +4278,8 @@ public:
         DrawText(highScoreText, canvasWidth/2 - hsWidth/2, 600, 24, WHITE);
 
         // Game rules - properly centered
-        DrawText("RULES:", canvasWidth/2 - 50, 700, 30, YELLOW);
-        DrawText("• the Dragon automatically follows your cursur locations", canvasWidth/2 - 500, 740, 20, WHITE);
-        DrawText("• Left/Right click or Mouse Wheel to select tiles. Hold Left/Right Click to move pointer leftmost/rightmost", canvasWidth/2 - 500, 765, 20, WHITE);
-        DrawText("• Pick up tiles by moving the snake over them. The pick up tile replaces the selected tile", canvasWidth/2 - 500, 790, 20, WHITE);
-        DrawText("• To MAHJONG: (Get 3 consecutive OR triplets) + 1 pair e.g. Hand (4-5) (1-1-1) (9-9) and picks up 3 or 6", canvasWidth/2 - 500, 815, 20, WHITE);
-        DrawText("• To KONG: Get 4 of the same tile e.g. Hand (4-5) (1-1-1) (9-9) and picks up 1", canvasWidth/2 - 500, 840, 20, WHITE);
-        DrawText("• Use KEEP to preserve good hands and prevent replacing tile", canvasWidth/2 - 500, 865, 20, WHITE);
-        DrawText("• MAHJONG until Cultivation Level 4 then LOONG (1-9 consecutive of same tile type) to WIN!", canvasWidth/2 - 500, 890, 20, WHITE);
+        DrawText("WASD to Move | Q/E to Select | SHIFT for Power", canvasWidth/2 - 250, 750, 24, YELLOW);
+        DrawText("Match tiles to evolve your Dragon!", canvasWidth/2 - 180, 800, 24, WHITE);
     }
 
     void DrawDifficultySelectionScreen()
@@ -4559,14 +4660,14 @@ public:
 
     void DrawCompactTileDisplay()
     {
-        // Draw compact tile display above the game area
-        int tileDisplayY = 50;
+        // Draw enhanced tile display above the game area
+        int tileDisplayY = 40;
         int tileDisplayX = gameAreaOffset;
 
         // Black background for tile display with white border - wider for 13 tiles + KEEP
-        int maxTileWidth = 13 * 65 + 80 + 40; // 13 tiles * 65px + KEEP width + padding
-        Rectangle tileBackground = {(float)(tileDisplayX - 10), (float)(tileDisplayY - 10),
-                                   (float)maxTileWidth, 100.0f};
+        int maxTileWidth = 13 * 80 + 100 + 40; 
+        Rectangle tileBackground = {(float)(tileDisplayX - 15), (float)(tileDisplayY - 10),
+                                   (float)maxTileWidth, 120.0f};
         DrawRectangleRec(tileBackground, BLACK);
         DrawRectangleLinesEx(tileBackground, 3, WHITE);
 
@@ -4576,11 +4677,11 @@ public:
         // Draw tiles horizontally
         for (int i = 0; i < (int)mahjongTiles.tiles.size(); i++)
         {
-            int tileX = tileDisplayX + 20 + i * 65; // Tighter spacing for more tiles
-            int tileY = tileDisplayY + 30;
+            int tileX = tileDisplayX + 20 + i * 80; // Increased spacing
+            int tileY = tileDisplayY + 35;
 
-            // Draw tile background - different colors for types and gold
-            Rectangle tileBg = {(float)(tileX - 5), (float)(tileY - 5), 50.0f, 40.0f};
+            // Draw tile background
+            Rectangle tileBg = {(float)(tileX - 5), (float)(tileY - 5), 65.0f, 55.0f};
             const Tile& tile = mahjongTiles.tiles[i];
 
             Color bgColor;
@@ -4611,9 +4712,9 @@ public:
             if (i == mahjongTiles.arrowPosition)
             {
                 DrawTriangle(
-                    Vector2{(float)(tileX + 25), (float)(tileY + 45)}, // Top point
-                    Vector2{(float)(tileX + 15), (float)(tileY + 60)}, // Bottom left
-                    Vector2{(float)(tileX + 35), (float)(tileY + 60)}, // Bottom right
+                    Vector2{(float)(tileX + 27), (float)(tileY + 55)}, // Top point
+                    Vector2{(float)(tileX + 12), (float)(tileY + 75)}, // Bottom left
+                    Vector2{(float)(tileX + 42), (float)(tileY + 75)}, // Bottom right
                     WHITE
                 );
             }
@@ -4623,22 +4724,21 @@ public:
 
             if (tile.IsZero()) {
                 // Special display for zero tiles - larger and centered
-                DrawText("0", tileX + 20, tileY + 5, 30, {192, 192, 192, 255}); // Silver text for zeros
+                DrawText("0", tileX + 18, tileY + 5, 40, {192, 192, 192, 255}); 
             } else if (tile.type == PLAIN_TILES) {
-                DrawText(TextFormat("%d", tile.value), tileX + 15, tileY + 5, 30, textColor);
+                DrawText(TextFormat("%d", tile.value), tileX + 15, tileY + 5, 40, textColor);
             } else if (tile.type == HAT_TILES) {
-                DrawText(TextFormat("%d^", tile.value), tileX + 10, tileY + 5, 26, textColor);
+                DrawText(TextFormat("%d^", tile.value), tileX + 10, tileY + 5, 36, textColor);
             } else if (tile.type == DOT_TILES) {
-                DrawText(TextFormat("%d.", tile.value), tileX + 10, tileY + 5, 26, textColor);
+                DrawText(TextFormat("%d.", tile.value), tileX + 10, tileY + 5, 36, textColor);
             }
         }
 
-        // Draw KEEP option - using tighter spacing
-        int keepX = tileDisplayX + 20 + mahjongTiles.tiles.size() * 65;
-        int keepY = tileDisplayY + 30;
+        // Draw KEEP option
+        int keepX = tileDisplayX + 20 + mahjongTiles.tiles.size() * 80;
+        int keepY = tileDisplayY + 35;
 
-        // Draw KEEP background - black with white border, red if selected
-        Rectangle keepBg = {(float)(keepX - 5), (float)(keepY - 5), 60.0f, 40.0f};
+        Rectangle keepBg = {(float)(keepX - 5), (float)(keepY - 5), 85.0f, 55.0f};
         Color keepBgColor = (mahjongTiles.arrowPosition == mahjongTiles.maxTiles) ? RED : BLACK;
         DrawRectangleRec(keepBg, keepBgColor);
         DrawRectangleLinesEx(keepBg, 3, WHITE);
@@ -4647,15 +4747,15 @@ public:
         if (mahjongTiles.arrowPosition == mahjongTiles.maxTiles)
         {
             DrawTriangle(
-                Vector2{(float)(keepX + 30), (float)(keepY + 45)}, // Top point
-                Vector2{(float)(keepX + 20), (float)(keepY + 60)}, // Bottom left
-                Vector2{(float)(keepX + 40), (float)(keepY + 60)}, // Bottom right
+                Vector2{(float)(keepX + 37), (float)(keepY + 55)}, // Top point
+                Vector2{(float)(keepX + 22), (float)(keepY + 75)}, // Bottom left
+                Vector2{(float)(keepX + 52), (float)(keepY + 75)}, // Bottom right
                 WHITE
             );
         }
 
-        // Draw KEEP text in large white text
-        DrawText("KEEP", keepX + 5, keepY + 5, 22, WHITE);
+        // Draw KEEP text
+        DrawText("KEEP", keepX + 10, keepY + 10, 28, WHITE);
     }
 
     void DrawUpgradeTile()
@@ -4747,32 +4847,23 @@ public:
         int loongHigh = (loongHighScores.count(currentKey) > 0) ? loongHighScores[currentKey] : 0;
         DrawText(TextFormat("High: %d", max(highScore, loongHigh)), uiPanelX + 20, 105, 24, WHITE);
 
-        // Game state info - compact layout
-        DrawText(TextFormat("Age: %d | Length: %d", snakeAge, (int)snake.body.size()), uiPanelX + 20, 135, 20, LIGHTGRAY);
-
-        // Lives display - compact horizontal layout
-        char livesText[100];
-        if (phoenixRebirthCharges > 0) {
-            sprintf(livesText, "Lives: %d | Phoenix: %d", extraLives, phoenixRebirthCharges);
-        } else {
-            sprintf(livesText, "Lives: %d", extraLives);
+        // Health display with icons
+        for (int i = 0; i < extraLives; i++) {
+            DrawText("❤", uiPanelX + 20 + (i * 30), 140, 24, RED);
         }
-        DrawText(livesText, uiPanelX + 20, 160, 20, GREEN);
+        if (phoenixRebirthCharges > 0) {
+            DrawText(TextFormat("+ %d Phoenix", phoenixRebirthCharges), uiPanelX + 20 + (extraLives * 30), 140, 20, GOLD);
+        }
 
         // Difficulty and ornate level
-        DrawText(TextFormat("Difficulty: %s", difficultyNames[selectedDifficulty].c_str()), uiPanelX + 20, 185, 18, YELLOW);
-        DrawText(TextFormat("Cultivation Level: %d", ornateLevel + 1), uiPanelX + 20, 210, 20, YELLOW);
-
-        // Essential controls only - simplified and positioned below other info
-        DrawText("Controls:", uiPanelX + 20, 240, 18, WHITE);
-        DrawText("• Click/Hold = Move tile selector", uiPanelX + 20, 260, 14, LIGHTGRAY);
-        DrawText("• Mouse = Move snake", uiPanelX + 20, 275, 14, LIGHTGRAY);
+        DrawText(TextFormat("Rank: %s", difficultyNames[selectedDifficulty].c_str()), uiPanelX + 20, 180, 18, YELLOW);
+        DrawText(TextFormat("Level: %d", ornateLevel + 1), uiPanelX + 20, 205, 20, GOLD);
 
         // STRATEGIC NEXT TILE PREVIEW - Make this prominent!
         if (mahjongTiles.futureTilesLocked && mahjongTiles.lockedTilesRemaining > 0) {
-            DrawText(">>> LOCKED TILE:", uiPanelX + 20, 295, 22, GOLD);
+            DrawText("LOCKED TILE:", uiPanelX + 20, 260, 22, GOLD);
         } else {
-            DrawText(">>> NEXT TILE:", uiPanelX + 20, 295, 22, GOLD);
+            DrawText("NEXT TILE:", uiPanelX + 20, 260, 22, GOLD);
         }
 
         string nextTileStr = mahjongTiles.nextTile.ToString();
@@ -4786,11 +4877,11 @@ public:
         }
 
         // Draw next tile in a larger, more prominent box
-        Rectangle nextTileBox = {(float)(uiPanelX + 20), 320, 80, 50};
+        Rectangle nextTileBox = {(float)(uiPanelX + 20), 290, 80, 60};
         DrawRectangleRec(nextTileBox, BLACK);
         DrawRectangleLinesEx(nextTileBox, 4, nextTileColor); // Thicker border
         int nextTileWidth = MeasureText(nextTileStr.c_str(), 30);
-        DrawText(nextTileStr.c_str(), uiPanelX + 60 - nextTileWidth/2, 335, 30, nextTileColor);
+        DrawText(nextTileStr.c_str(), uiPanelX + 60 - nextTileWidth/2, 305, 30, nextTileColor);
 
         // Strategic hint or locked tiles info
         if (mahjongTiles.futureTilesLocked && mahjongTiles.lockedTilesRemaining > 0) {
@@ -4798,167 +4889,33 @@ public:
             sprintf(lockedInfo, "Locked tiles left: %d", mahjongTiles.lockedTilesRemaining);
             DrawText(lockedInfo, uiPanelX + 20, 380, 14, GOLD);
         } else {
-            DrawText("Plan your moves!", uiPanelX + 20, 380, 14, YELLOW);
+            DrawText("Plan your moves!", uiPanelX + 20, 360, 14, YELLOW);
         }
 
         // SHIFT POWER DISPLAY - Below next tile preview
-        DrawText("*** SHIFT POWER:", uiPanelX + 20, 405, 16, GOLD);
+        DrawText("DRAGON POWER:", uiPanelX + 20, 400, 18, GOLD);
 
         // Power name and description - more compact
-        DrawText(shiftPowerName.c_str(), uiPanelX + 20, 425, 14, WHITE);
-        DrawText(shiftPowerDescription.c_str(), uiPanelX + 20, 440, 11, LIGHTGRAY);
+        DrawText(shiftPowerName.c_str(), uiPanelX + 20, 425, 16, WHITE);
 
         // Cooldown display - compact
         if (shiftPowerReady) {
-            DrawText("READY! Press SHIFT", uiPanelX + 20, 455, 12, GREEN);
+            DrawText("READY! [SHIFT]", uiPanelX + 20, 450, 14, GREEN);
         } else {
-            char cooldownText[50];
-            int tilesNeeded = shiftCooldownMax - shiftCooldownTiles;
-            sprintf(cooldownText, "Cooldown: %d tiles", tilesNeeded);
-            DrawText(cooldownText, uiPanelX + 20, 455, 12, RED);
-
             // Cooldown bar - smaller
-            Rectangle cooldownBar = {(float)(uiPanelX + 20), 470, 120, 6};
+            Rectangle cooldownBar = {(float)(uiPanelX + 20), 450, 150, 10};
             DrawRectangleRec(cooldownBar, DARKGRAY);
             float progress = (float)shiftCooldownTiles / (float)shiftCooldownMax;
-            Rectangle progressBar = {(float)(uiPanelX + 20), 470, 120 * progress, 6};
+            Rectangle progressBar = {(float)(uiPanelX + 20), 450, 150 * progress, 10};
             DrawRectangleRec(progressBar, GREEN);
         }
 
-        // Simplified win conditions - more compact
-        DrawText("Win Conditions:", uiPanelX + 20, 485, 16, GOLD);
-        DrawText("• MAHJONG: 3-group + 1-pair", uiPanelX + 20, 505, 14, WHITE);
-        DrawText("• KONG: 4 same tiles", uiPanelX + 20, 520, 14, GREEN);
-
-        // LOONG win condition (only show at level 3+)
-        if (ornateLevel >= 3) {
-            char loongText[100];
-            sprintf(loongText, "• LOONG: 1-9 consecutive (%dx score!)", loongWinMultiplier);
-            DrawText(loongText, uiPanelX + 20, 535, 14, GOLD);
-
-            // Show Mahjong requirement for higher difficulties
-            if (mahjongWinsRequired > 0) {
-                char reqText[100];
-                sprintf(reqText, "  Need %d Mahjongs first (%d/%d)", mahjongWinsRequired, mahjongWinsAchieved, mahjongWinsRequired);
-                DrawText(reqText, uiPanelX + 20, 550, 12, YELLOW);
-            }
-        }
-
-        // Essential tips only - more compact
-        int tipsY = ornateLevel >= 3 ? 570 : 540;
-        DrawText("Tips:", uiPanelX + 20, tipsY, 14, WHITE);
-
-        // Upgrade progress tracker - most important info
-        char upgradeProgress[100];
-        sprintf(upgradeProgress, "• Next upgrade: %d tiles", nextUpgradeThreshold);
-        DrawText(upgradeProgress, uiPanelX + 20, tipsY + 20, 12, GOLD);
-
-        DrawText("• SPACE = Reshuffle", uiPanelX + 20, tipsY + 35, 12, SKYBLUE);
-        DrawText("• SHIFT = Dragon power", uiPanelX + 20, tipsY + 50, 12, GOLD);
-
-        // Remaining tiles tracker with improved clarity
-        int trackerY = tipsY + 75;
-        DrawText("Remaining Tiles:", uiPanelX + 20, trackerY, 14, GOLD);
-
-        vector<pair<pair<int, TileType>, int>> remainingTiles = mahjongTiles.GetRemainingTiles();
-        int displayCount = min(30, (int)remainingTiles.size()); // Show up to 30 tiles
-
-        for (int i = 0; i < displayCount; i++) {
-            int row = i / 7; // 7 tiles per row for better spacing
-            int col = i % 7;
-            int tileX = uiPanelX + 20 + col * 40; // Wider spacing for better visibility
-            int tileY = trackerY + 25 + row * 40; // Taller spacing
-
-            auto& entry = remainingTiles[i];
-            int value = entry.first.first;
-            TileType type = entry.first.second;
-            int count = entry.second;
-
-            // Draw tile-like rectangle with better contrast
-            Rectangle tileRect = {(float)tileX, (float)tileY, 35, 30};
-
-            // Check if this tile has probability boost
-            bool hasHeldBoost = false;
-            bool hasAdjacentBoost = false;
-
-            if (currentProbabilityBonus > 0) {
-                // Check for held tile boost (KONG boost)
-                for (const Tile& tile : mahjongTiles.tiles) {
-                    if (tile.value == value && tile.type == type) {
-                        hasHeldBoost = true;
-                        break;
-                    }
-                }
-
-                // Check for adjacent tile boost (consecutive boost)
-                for (const Tile& tile : mahjongTiles.tiles) {
-                    if (tile.type == type) {
-                        if (abs(tile.value - value) == 1) {
-                            hasAdjacentBoost = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // High contrast background colors with probability highlighting
-            Color bgColor = BLACK;
-            Color textColor = WHITE;
-            if (hasHeldBoost) {
-                bgColor = {0, 100, 255, 200}; // Bright blue for held boost (KONG)
-                textColor = WHITE;
-            } else if (hasAdjacentBoost) {
-                bgColor = {255, 215, 0, 200}; // Gold for adjacent boost (consecutive)
-                textColor = BLACK;
-            } else if (count >= 3) {
-                bgColor = {0, 150, 0, 255}; // Dark green
-                textColor = WHITE;
-            } else if (count == 2) {
-                bgColor = {200, 150, 0, 255}; // Dark yellow/orange
-                textColor = BLACK;
-            } else if (count == 1) {
-                bgColor = {200, 100, 0, 255}; // Dark orange
-                textColor = WHITE;
-            } else {
-                bgColor = {150, 0, 0, 255}; // Dark red
-                textColor = WHITE;
-            }
-
-            DrawRectangleRec(tileRect, bgColor);
-
-            // Thick border color with probability highlighting
-            Color borderColor = WHITE;
-            if (hasHeldBoost) {
-                borderColor = {0, 150, 255, 255}; // Bright blue for held boost
-            } else if (hasAdjacentBoost) {
-                borderColor = {255, 215, 0, 255}; // Gold for adjacent boost
-            } else if (type == HAT_TILES) {
-                borderColor = {100, 200, 255, 255}; // Bright blue
-            } else if (type == DOT_TILES) {
-                borderColor = {100, 255, 100, 255}; // Bright green
-            }
-
-            DrawRectangleLinesEx(tileRect, hasHeldBoost || hasAdjacentBoost ? 4 : 3, borderColor);
-
-            // Draw tile value with better contrast
-            string tileStr = to_string(value);
-            if (type == HAT_TILES) tileStr += "^";
-            else if (type == DOT_TILES) tileStr += ".";
-
-            int textWidth = MeasureText(tileStr.c_str(), 14);
-            DrawText(tileStr.c_str(), tileX + 17 - textWidth/2, tileY + 2, 14, textColor);
-
-            // Draw count in bottom right with high contrast
-            string countStr = to_string(count);
-            int countWidth = MeasureText(countStr.c_str(), 12);
-            DrawText(countStr.c_str(), tileX + 32 - countWidth, tileY + 18, 12, textColor);
-        }
-
-        if (gameState == GAME_OVER)
-        {
-            DrawText("GAME OVER", uiPanelX + 30, 470, 24, RED);
-            DrawText("Left click to restart", uiPanelX + 20, 500, 16, RED);
-        }
+        // Evolution Progress
+        DrawText(TextFormat("Next Evolution: %d/%d", snakeAge, nextUpgradeThreshold), uiPanelX + 20, 500, 16, YELLOW);
+        Rectangle upgradeBg = {(float)(uiPanelX + 20), 525, 150, 8};
+        DrawRectangleRec(upgradeBg, DARKGRAY);
+        float upProgress = (float)snakeAge / (float)nextUpgradeThreshold;
+        DrawRectangleRec({upgradeBg.x, upgradeBg.y, 150 * upProgress, 8}, GOLD);
     }
 
     void DrawChoiceWindow()
@@ -5514,13 +5471,12 @@ public:
 
             // Check for Water LOONG Healing Waters
             healingCounter++;
-            if (healingCounter >= 5) { // Every 5 fruits
-                cout << "💧 HEALING WATERS! Reducing length by 2!" << endl;
+            if (healingCounter >= 5 && waterHealingAmount > 0) { // Every 5 fruits
+                cout << "💧 HEALING WATERS! Reducing length by " << waterHealingAmount << "!" << endl;
                 healingCounter = 0;
 
-                // Reduce snake length by 2 (healing effect)
-                if (snake.body.size() > 6) { // Keep minimum size
-                    snake.body.pop_back();
+                // Reduce snake length (healing effect)
+                for (int i = 0; i < waterHealingAmount; i++) {
                     if (snake.body.size() > 6) {
                         snake.body.pop_back();
                     }
@@ -5528,6 +5484,16 @@ public:
 
                 // Play healing sound (optimized)
                 PlaySoundSafe(eatSound, 1.3f, GetTime(), lastSoundTime, soundCooldown);
+            }
+
+            // Check for Wind LOONG Lightning Speed length reduction
+            if (fruitCounter % 5 == 0 && windLengthReduction > 0) {
+                cout << "🌪️ LIGHTNING SPEED! Reducing length by " << windLengthReduction << "!" << endl;
+                for (int i = 0; i < windLengthReduction; i++) {
+                    if (snake.body.size() > 6) {
+                        snake.body.pop_back();
+                    }
+                }
             }
         }
     }
@@ -5537,17 +5503,18 @@ public:
         if (snake.body[0].x == cellCount || snake.body[0].x == -1 ||
             snake.body[0].y == cellCount || snake.body[0].y == -1)
         {
+            // Move head back to previous valid position immediately by shrinking
+            if (snake.body.size() > 1) {
+                snake.body.pop_front();
+            }
+            snake.direction = {0, 0}; // Hard stop: prevent tunneling through wall
+
             // Check for wall immunity (Water LOONG Tsunami Shield or Earth/White LOONG Granite Will)
             if (wallImmunities > 0) {
                 wallImmunities--;
 
                 if (isGraniteWillActive) {
                     cout << ">>> GRANITE WILL IMMUNITY: Stopped at wall! Immunities remaining: " << wallImmunities << endl;
-
-                    // Stop the snake instead of teleporting - move back one step
-                    if (snake.body.size() > 1) {
-                        snake.body[0] = snake.body[1]; // Move head back to previous position
-                    }
                 } else {
                     cout << ">>> TSUNAMI SHIELD ACTIVATED! Wall collision ignored. Remaining immunities: " << wallImmunities << endl;
 
@@ -5581,11 +5548,7 @@ public:
             // Show epic phoenix rebirth effect
             showPhoenixRebirth = true;
             phoenixRebirthTimer = 3.0f;
-
-            // Play special phoenix sound
-            SetSoundPitch(eatSound, 2.0f);
-            PlaySound(eatSound);
-            SetSoundPitch(eatSound, 1.0f);
+            PlaySoundSafe(eatSound, 2.0f, GetTime(), lastSoundTime, 0.0f);
 
             return; // Don't continue to normal death handling
         }
@@ -5596,13 +5559,7 @@ public:
             isInExtraLifeMode = true;
             lastExtraLifeType = "Celestial";
             cout << ">>> CELESTIAL REBIRTH ACTIVATED! Normal revival! Charges remaining: " << celestialCharges << endl;
-
-            // Apply special LOONG extra life effects based on selected LOONG
             ApplySpecialExtraLifeEffect();
-
-            // Move snake to center and pause game
-            snake.body[0] = {(float)(cellCount/2), (float)(cellCount/2)};
-
             PlaySoundSafe(eatSound, 1.0f, GetTime(), lastSoundTime, soundCooldown); // Different sound for extra life
         }
         // Use Phoenix Rebirth second (with bonus scoring + speed penalty)
@@ -5618,13 +5575,7 @@ public:
             // PHOENIX REBIRTH SPEED PENALTY - Boost speed as penalty for power
             currentSpeedMultiplier *= 1.5f; // 50% faster (penalty)
             cout << ">>> PHOENIX REBIRTH ACTIVATED! Bonus: " << rebirthBonus << " points (25% of score)! Speed boosted to " << (currentSpeedMultiplier * 100) << "%! Charges remaining: " << phoenixRebirthCharges << endl;
-
-            // Apply special LOONG extra life effects based on selected LOONG
             ApplySpecialExtraLifeEffect();
-
-            // Move snake to center and pause game
-            snake.body[0] = {(float)(cellCount/2), (float)(cellCount/2)};
-
             PlaySoundSafe(eatSound, 1.0f, GetTime(), lastSoundTime, soundCooldown); // Different sound for extra life
         }
         // Then use regular extra lives (basic effect)
@@ -5633,10 +5584,6 @@ public:
             isInExtraLifeMode = true;
             lastExtraLifeType = "Basic";
             cout << "Basic extra life used! Lives remaining: " << extraLives << endl;
-
-            // Move snake to center and pause game
-            snake.body[0] = {(float)(cellCount/2), (float)(cellCount/2)};
-
             PlaySoundSafe(eatSound, 1.0f, GetTime(), lastSoundTime, soundCooldown); // Different sound for extra life
         } else {
             // WHITE LOONG Divine Shield: Remove zeros instead of game over
@@ -5659,9 +5606,6 @@ public:
                             i--; // Adjust index after removal
                         }
                     }
-
-                    // Move snake to center and continue playing
-                    snake.body[0] = {(float)(cellCount/2), (float)(cellCount/2)};
                     isInExtraLifeMode = true;
                     lastExtraLifeType = "Divine Shield";
 
@@ -5843,6 +5787,8 @@ public:
         kongWins = 0;
         totalWins = 0;
         currentTileCount = 4;
+        waterHealingAmount = 0;
+        windLengthReduction = 0;
 
         // Reset tile system completely
         mahjongTiles.availableTypes.clear();
@@ -5983,6 +5929,8 @@ public:
         kongWins = 0;
         totalWins = 0;
         currentTileCount = 4;
+        waterHealingAmount = 0;
+        windLengthReduction = 0;
 
         // Reset tile system completely
         mahjongTiles.availableTypes.clear();
@@ -6258,6 +6206,12 @@ public:
         headlessBody.pop_front();
         if (ElementInDeque(snake.body[0], headlessBody))
         {
+            // Move head back to previous valid position immediately by shrinking
+            if (snake.body.size() > 1) {
+                snake.body.pop_front();
+            }
+            snake.direction = {0, 0}; // Hard stop: prevent tunneling through body
+
             // Check for Granite Will immunity (Earth/White LOONG)
             if (isGraniteWillActive && wallImmunities > 0) {
                 wallImmunities--;
@@ -6554,7 +6508,6 @@ int main()
 
         if (EventTriggered(actualSpeed)) // Speed affected by power-ups
         {
-            allowMove = true;
             game.UpdateGameplay(); // This now checks if choice window is open
         }
 
