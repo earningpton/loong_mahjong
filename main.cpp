@@ -4116,14 +4116,14 @@ public:
 
                 if (selectLeft || selectRight) {
                     selectRepeatTimer += GetFrameTime();
-                    if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E) || (gpAvailable && (IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1) || IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)))) {
+                    if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_E) || (gpAvailable && (IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1) || IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_2) || IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1) || IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_2)))) {
                         if (selectLeft) mahjongTiles.MoveArrowLeft();
                         if (selectRight) mahjongTiles.MoveArrowRight();
                         selectRepeatTimer = 0.0f;
                     } else if (selectRepeatTimer >= REPEAT_DELAY) {
-                        if (selectLeft) mahjongTiles.MoveArrowLeft();
-                        if (selectRight) mahjongTiles.MoveArrowRight();
-                        selectRepeatTimer = REPEAT_DELAY - REPEAT_RATE;
+                        if (selectLeft) mahjongTiles.MoveArrowToFarLeft();
+                        if (selectRight) mahjongTiles.MoveArrowToFarRight();
+                        selectRepeatTimer = 0.0f; // Jump once and wait for re-press or next threshold
                     }
                 } else {
                     selectRepeatTimer = 0.0f;
@@ -4134,10 +4134,6 @@ public:
                 if (menuDown && snake.direction.y != -1) snake.direction = {0, 1};
                 if (menuLeft && snake.direction.x != 1) snake.direction = {-1, 0};
                 if (menuRight && snake.direction.x != -1) snake.direction = {1, 0};
-
-                // Controller tile selection
-                if (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1)) mahjongTiles.MoveArrowLeft();
-                if (gpAvailable && IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) mahjongTiles.MoveArrowRight();
 
                 // Mouse wheel support for tile selection (same as A/D)
                 float wheelMove = GetMouseWheelMove();
